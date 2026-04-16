@@ -3,6 +3,7 @@ import { Geist, Geist_Mono, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import Header from "@/components/layout/header";
 import { cn } from "@/lib/utils";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 const jetbrainsMono = JetBrains_Mono({subsets:['latin'],variable:'--font-mono'});
 
@@ -32,8 +33,10 @@ export default function RootLayout({
       className={cn("h-full overflow-x-hidden", "antialiased", geistSans.variable, geistMono.variable, "font-mono", jetbrainsMono.variable)}
     >
       <body className="min-h-full flex flex-col overflow-x-hidden">
-        <Header />
-        <main className="relative flex-1">{children}</main>
+        <TooltipProvider>
+          <Header />
+          <main className="relative flex-1">{children}</main>
+        </TooltipProvider>
       </body>
     </html>
   );

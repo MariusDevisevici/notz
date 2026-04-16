@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { loginAction, logoutAction } from "@/app/actions/auth-actions";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button, buttonVariants } from "@/components/ui/button";
+import { prisma } from "@/lib/prisma";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -13,6 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { ListIcon, GearSixIcon, StarIcon } from "@phosphor-icons/react/dist/ssr";
 
 const Header = async () => {
   const session = await auth();
@@ -20,44 +22,128 @@ const Header = async () => {
   const identity = session?.user?.name ?? session?.user?.email ?? "Guest";
   const image = session?.user?.image;
   const userInitial = identity.trim().charAt(0).toUpperCase();
+  const userEmail = session?.user?.email;
+
+  const allNotz = isLoggedIn && userEmail
+    ? await prisma.notz.findMany({
+        where: {
+          user: {
+            email: userEmail,
+          },
+        },
+        orderBy: {
+          name: "asc",
+        },
+        select: {
+          id: true,
+          name: true,
+          featured: true,
+        },
+      })
+    : [];
+
+  const featuredNotz = allNotz.filter((n) => n.featured);
+  const unfeaturedNotz = allNotz.filter((n) => !n.featured);
 
   return (
     <header className="px-2 py-3 sm:px-6 sm:py-5">
-      <div className="neo-panel mx-auto flex w-full max-w-6xl items-center justify-between gap-2 bg-card px-2.5 py-2.5 sm:gap-3 sm:px-5 sm:py-4">
-        <Link
-          href="/"
-          className="inline-flex shrink-0 -rotate-2 border-3 border-foreground bg-primary px-2.5 py-1.5 text-base font-black uppercase tracking-[0.18em] text-primary-foreground shadow-[4px_4px_0_0_var(--color-foreground)] sm:border-4 sm:px-3 sm:py-2 sm:text-lg sm:tracking-[0.2em] sm:shadow-[6px_6px_0_0_var(--color-foreground)]"
-        >
-          Notz
-        </Link>
+      <div className="neo-panel mx-auto flex w-full max-w-6xl items-center justify-between gap-2 bg-card px-2.5 py-2.5 sm:gap-4 sm:px-5 sm:py-4">
+        <div className="flex min-w-0 items-center gap-2 sm:gap-3">
+          <Link
+            href="/"
+            className="inline-flex shrink-0 -rotate-2 border-3 border-foreground bg-primary px-2.5 py-1.5 text-base font-black uppercase tracking-[0.18em] text-primary-foreground shadow-[4px_4px_0_0_var(--color-foreground)] sm:border-4 sm:px-3 sm:py-2 sm:text-lg sm:tracking-[0.2em] sm:shadow-[6px_6px_0_0_var(--color-foreground)]"
+          >
+            Notz
+          </Link>
 
-        <div className="flex items-center gap-2 sm:gap-3">
+          {isLoggedIn && featuredNotz.length > 0 && (
+            <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto sm:gap-2">
+              {featuredNotz.map((item, index) => (
+                <Link
+                  key={item.id}
+                  href={`/notz/${encodeURIComponent(item.name)}`}
+                  className={cn(
+                    buttonVariants({ variant: "outline", size: "xs" }),
+                    "shrink-0",
+                    index > 0 && "hidden sm:inline-flex"
+                  )}
+                  aria-label={item.name}
+                >
+                    <StarIcon weight="fill" className="size-3.5 sm:hidden" />
+                  <span className="hidden sm:inline">{item.name}</span>
+                </Link>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="flex shrink-0 items-center gap-2 sm:gap-3">
           {isLoggedIn ? (
             <>
+              {allNotz.length > 0 && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    className={cn(
+                      buttonVariants({ variant: "outline", size: "xs" }),
+                      "cursor-pointer"
+                    )}
+                  >
+                    <ListIcon weight="bold" className="size-4 sm:hidden" />
+                    <span className="hidden sm:inline">All Notz</span>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent
+                    align="end"
+                    sideOffset={8}
+                    className="neo-panel min-w-40 max-w-[calc(100vw-2rem)] rounded-none border-3 border-foreground bg-card p-2 shadow-[4px_4px_0_0_var(--color-foreground)] ring-0 sm:min-w-48 sm:shadow-[6px_6px_0_0_var(--color-foreground)]"
+                  >
+                    <DropdownMenuGroup>
+                      <DropdownMenuLabel className="border-b-3 border-foreground px-0 pb-2 text-xs font-black uppercase tracking-[0.18em] text-foreground/70">
+                        Your Notz
+                      </DropdownMenuLabel>
+                    </DropdownMenuGroup>
+                    <div className="mt-2 grid gap-1">
+                      {allNotz.map((item) => (
+                        <DropdownMenuItem key={item.id}>
+                          <Link
+                            href={`/notz/${encodeURIComponent(item.name)}`}
+                            className="flex w-full items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-foreground"
+                          >
+                            {item.featured && (
+                              <span className="inline-block size-1.5 shrink-0 bg-primary" aria-label="Featured" />
+                            )}
+                            {item.name}
+                          </Link>
+                        </DropdownMenuItem>
+                      ))}
+                    </div>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
+
               <Link
                 href="/create-notz"
                 className={cn(
                   buttonVariants({ variant: "ghost", size: "xs" }),
-                  "hidden sm:inline-flex"
+                  "hidden shrink-0 sm:inline-flex"
                 )}
               >
-                Create Notz
+                Manage Notz
               </Link>
 
               <Link
                 href="/create-notz"
                 className={cn(
                   buttonVariants({ variant: "ghost", size: "icon-xs" }),
-                  "sm:hidden"
+                  "shrink-0 sm:hidden"
                 )}
-                aria-label="Create Notz"
+                aria-label="Manage Notz"
               >
-                +
+                <GearSixIcon weight="bold" className="size-4" />
               </Link>
 
               <DropdownMenu>
                 <DropdownMenuTrigger
-                  className="flex cursor-pointer items-center gap-2 rounded-none border-3 border-foreground bg-secondary px-2 py-1.5 shadow-[4px_4px_0_0_var(--color-foreground)] outline-none transition-transform focus-visible:ring-0 data-popup-open:translate-x-0.5 data-popup-open:translate-y-0.5 data-popup-open:shadow-[2px_2px_0_0_var(--color-foreground)] sm:gap-3 sm:px-3 sm:py-2 sm:shadow-[6px_6px_0_0_var(--color-foreground)] sm:data-popup-open:shadow-[4px_4px_0_0_var(--color-foreground)]"
+                  className="flex shrink-0 cursor-pointer items-center gap-2 rounded-none border-3 border-foreground bg-secondary px-2 py-1.5 shadow-[4px_4px_0_0_var(--color-foreground)] outline-none transition-transform focus-visible:ring-0 data-popup-open:translate-x-0.5 data-popup-open:translate-y-0.5 data-popup-open:shadow-[2px_2px_0_0_var(--color-foreground)] sm:gap-3 sm:px-3 sm:py-2 sm:shadow-[6px_6px_0_0_var(--color-foreground)] sm:data-popup-open:shadow-[4px_4px_0_0_var(--color-foreground)]"
                   aria-label="Open account menu"
                 >
                   <Avatar
