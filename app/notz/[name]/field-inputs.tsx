@@ -27,6 +27,8 @@ interface FieldInputProps {
 
 export function FieldInput({ field, onChange, disabled }: FieldInputProps) {
   switch (field.type) {
+    case "label":
+      return null;
     case "text":
       return <TextFieldInput field={field} onChange={onChange} disabled={disabled} />;
     case "number":

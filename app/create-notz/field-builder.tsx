@@ -22,6 +22,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   DotsSixVerticalIcon,
+  TextTIcon,
   TextAaIcon,
   HashIcon,
   StarIcon,
@@ -45,6 +46,7 @@ import { FIELD_TYPES, FIELD_TYPE_LABELS } from "@/lib/models/notz";
 import { compressImageFile } from "@/lib/utils/image-field";
 
 const FIELD_ICONS: Record<FieldType, React.ReactNode> = {
+  label: <TextTIcon weight="bold" className="size-4" />,
   text: <TextAaIcon weight="bold" className="size-4" />,
   number: <HashIcon weight="bold" className="size-4" />,
   rating: <StarIcon weight="bold" className="size-4" />,
@@ -545,19 +547,6 @@ function BuilderFieldItem({
             <p className="text-xs font-bold uppercase tracking-[0.12em] text-destructive">
               {imageError}
             </p>
-          )}
-          <p className="text-[0.65rem] font-bold uppercase tracking-[0.12em] text-foreground/50">
-            Uploads are compressed before save.
-          </p>
-          {typeof field.value === "string" && field.value && (
-            <div className="border-2 border-foreground bg-background p-1">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={field.value}
-                alt={field.label || "Image preview"}
-                className="max-h-40 w-full object-contain"
-              />
-            </div>
           )}
         </div>
       )}

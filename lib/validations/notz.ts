@@ -7,6 +7,7 @@ const notzNameSchema = z
   .refine((val) => !/\s/.test(val), "Name cannot contain spaces");
 
 const fieldTypeSchema = z.enum([
+  "label",
   "text",
   "number",
   "rating",
@@ -18,31 +19,36 @@ const fieldTypeSchema = z.enum([
   "list",
 ]);
 
-export const notzFieldSchema = z.object({
-  id: z.string().min(1),
-  label: z.string().trim().min(1, "Label is required"),
-  type: fieldTypeSchema,
-  max: z.number().int().min(2).max(10).optional(),
-  options: z.array(z.string().trim().min(1)).optional(),
-  checkable: z.boolean().optional(),
-  row: z.number().int().min(0).optional(),
-  column: z.number().int().min(0).optional(),
-  value: z
-    .union([
-      z.string(),
-      z.number(),
-      z.boolean(),
-      z.array(z.string()),
-      z.array(
-        z.object({
-          text: z.string(),
-          completed: z.boolean(),
-        })
-      ),
-      z.null(),
-    ])
-    .optional(),
-});
+export const notzFieldSchema = z
+  .object({
+    id: z.string().min(1),
+    label: z.string().trim(),
+    type: fieldTypeSchema,
+    max: z.number().int().min(2).max(10).optional(),
+    options: z.array(z.string().trim().min(1)).optional(),
+    checkable: z.boolean().optional(),
+    row: z.number().int().min(0).optional(),
+    column: z.number().int().min(0).optional(),
+    value: z
+      .union([
+        z.string(),
+        z.number(),
+        z.boolean(),
+        z.array(z.string()),
+        z.array(
+          z.object({
+            text: z.string(),
+            completed: z.boolean(),
+          })
+        ),
+        z.null(),
+      ])
+      .optional(),
+  })
+  .refine(
+    (field) => field.type === "image" || field.label.length > 0,
+    { message: "Label is required", path: ["label"] }
+  );
 
 export const createNotzSchema = z.object({
   name: notzNameSchema,

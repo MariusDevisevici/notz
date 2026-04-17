@@ -10,6 +10,7 @@ import {
 export const MAX_FEATURED_NOTZ = 3;
 
 export const FIELD_TYPES = [
+	"label",
 	"text",
 	"number",
 	"rating",
@@ -24,6 +25,7 @@ export const FIELD_TYPES = [
 export type FieldType = (typeof FIELD_TYPES)[number];
 
 export const FIELD_TYPE_LABELS: Record<FieldType, string> = {
+	label: "Label",
 	text: "Text",
 	number: "Number",
 	rating: "Rating",

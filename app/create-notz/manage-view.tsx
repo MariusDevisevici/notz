@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PencilSimpleIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
@@ -254,9 +255,12 @@ export function ManageNotzView({ featuredCount, initialNotz }: ManageNotzViewPro
                               className="w-full border-2 border-foreground bg-background px-3 py-2 text-sm font-medium text-foreground outline-none focus:border-3"
                             />
                           ) : (
-                            <span className="text-sm font-bold uppercase tracking-[0.12em] text-foreground">
+                            <Link
+                              href={`/notz/${encodeURIComponent(item.name)}`}
+                              className="text-sm font-bold uppercase tracking-[0.12em] text-foreground underline decoration-2 underline-offset-2 hover:text-primary"
+                            >
                               {item.name}
-                            </span>
+                            </Link>
                           )}
                         </td>
                         <td className="px-4 py-3 align-middle">
@@ -441,9 +445,12 @@ export function ManageNotzView({ featuredCount, initialNotz }: ManageNotzViewPro
                     ) : (
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex min-w-0 items-center gap-2">
-                          <span className="truncate text-sm font-bold uppercase tracking-[0.12em] text-foreground">
+                          <Link
+                            href={`/notz/${encodeURIComponent(item.name)}`}
+                            className="truncate text-sm font-bold uppercase tracking-[0.12em] text-foreground underline decoration-2 underline-offset-2 hover:text-primary"
+                          >
                             {item.name}
-                          </span>
+                          </Link>
                           {item.fieldCount > 0 && (
                             <span className="inline-flex shrink-0 items-center border border-foreground bg-secondary px-1.5 py-0.5 text-[0.6rem] font-bold uppercase leading-none tracking-widest text-foreground">
                               {item.fieldCount}f

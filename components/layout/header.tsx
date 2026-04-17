@@ -14,7 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ListIcon, StarIcon } from "@phosphor-icons/react/dist/ssr";
+import { StarIcon } from "@phosphor-icons/react/dist/ssr";
 
 const Header = async () => {
   const session = await auth();
@@ -43,7 +43,6 @@ const Header = async () => {
     : [];
 
   const featuredNotz = allNotz.filter((n) => n.featured);
-  const unfeaturedNotz = allNotz.filter((n) => !n.featured);
 
   return (
     <header className="px-2 py-3 sm:px-6 sm:py-5">
@@ -58,21 +57,29 @@ const Header = async () => {
 
           {isLoggedIn && featuredNotz.length > 0 && (
             <div className="flex min-w-0 items-center gap-1.5 overflow-x-auto sm:gap-2">
-              {featuredNotz.map((item, index) => (
-                <Link
-                  key={item.id}
-                  href={`/notz/${encodeURIComponent(item.name)}`}
-                  className={cn(
-                    buttonVariants({ variant: "outline", size: "xs" }),
-                    "shrink-0",
-                    index > 0 && "hidden sm:inline-flex"
-                  )}
-                  aria-label={item.name}
-                >
-                    <StarIcon weight="fill" className="size-3.5 sm:hidden" />
-                  <span className="hidden sm:inline">{item.name}</span>
-                </Link>
-              ))}
+              {featuredNotz.map((item, index) => {
+                const starColors = [
+                  "text-primary",
+                  "text-amber-500",
+                  "text-emerald-500",
+                ];
+                const starColor = starColors[index % starColors.length];
+
+                return (
+                  <Link
+                    key={item.id}
+                    href={`/notz/${encodeURIComponent(item.name)}`}
+                    className={cn(
+                      buttonVariants({ variant: "outline", size: "xs" }),
+                      "shrink-0"
+                    )}
+                    aria-label={item.name}
+                  >
+                    <StarIcon weight="fill" className={cn("size-3.5 sm:hidden", starColor)} />
+                    <span className="hidden sm:inline">{item.name}</span>
+                  </Link>
+                );
+              })}
             </div>
           )}
         </div>
@@ -80,46 +87,6 @@ const Header = async () => {
         <div className="flex shrink-0 items-center gap-2 sm:gap-3">
           {isLoggedIn ? (
             <>
-              {allNotz.length > 0 && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger
-                    className={cn(
-                      buttonVariants({ variant: "outline", size: "xs" }),
-                      "cursor-pointer"
-                    )}
-                  >
-                    <ListIcon weight="bold" className="size-4 sm:hidden" />
-                    <span className="hidden sm:inline">All Notz</span>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent
-                    align="end"
-                    sideOffset={8}
-                    className="neo-panel min-w-40 max-w-[calc(100vw-2rem)] rounded-none border-3 border-foreground bg-card p-2 shadow-[4px_4px_0_0_var(--color-foreground)] ring-0 sm:min-w-48 sm:shadow-[6px_6px_0_0_var(--color-foreground)]"
-                  >
-                    <DropdownMenuGroup>
-                      <DropdownMenuLabel className="border-b-3 border-foreground px-0 pb-2 text-xs font-black uppercase tracking-[0.18em] text-foreground/70">
-                        Your Notz
-                      </DropdownMenuLabel>
-                    </DropdownMenuGroup>
-                    <div className="mt-2 grid gap-1">
-                      {allNotz.map((item) => (
-                        <DropdownMenuItem key={item.id}>
-                          <Link
-                            href={`/notz/${encodeURIComponent(item.name)}`}
-                            className="flex w-full items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-foreground"
-                          >
-                            {item.featured && (
-                              <span className="inline-block size-1.5 shrink-0 bg-primary" aria-label="Featured" />
-                            )}
-                            {item.name}
-                          </Link>
-                        </DropdownMenuItem>
-                      ))}
-                    </div>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
-
               <Link
                 href="/create-notz"
                 className={cn(
@@ -129,8 +96,6 @@ const Header = async () => {
               >
                 Manage Notz
               </Link>
-
-
 
               <DropdownMenu>
                 <DropdownMenuTrigger
@@ -175,6 +140,33 @@ const Header = async () => {
                         Manage Notz
                       </Link>
                     </DropdownMenuItem>
+
+                    {allNotz.length > 0 && (
+                      <>
+                        <DropdownMenuSeparator className="mx-0 my-1 h-0.75 bg-foreground" />
+                        <DropdownMenuGroup>
+                          <DropdownMenuLabel className="px-0 pb-1 text-[10px] font-black uppercase tracking-[0.18em] text-foreground/50">
+                            Your Notz
+                          </DropdownMenuLabel>
+                        </DropdownMenuGroup>
+                        <div className="grid gap-1">
+                          {allNotz.map((item) => (
+                            <DropdownMenuItem key={item.id}>
+                              <Link
+                                href={`/notz/${encodeURIComponent(item.name)}`}
+                                className="flex w-full items-center gap-2 text-xs font-bold uppercase tracking-[0.14em] text-foreground"
+                              >
+                                {item.featured && (
+                                  <span className="inline-block size-1.5 shrink-0 bg-primary" aria-label="Featured" />
+                                )}
+                                {item.name}
+                              </Link>
+                            </DropdownMenuItem>
+                          ))}
+                        </div>
+                      </>
+                    )}
+
                     <DropdownMenuSeparator className="mx-0 my-1 h-0.75 bg-foreground" />
                     <form action={logoutAction}>
                       <Button

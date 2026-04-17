@@ -22,6 +22,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import {
   DotsSixVerticalIcon,
+  TextTIcon,
   TextAaIcon,
   HashIcon,
   StarIcon,
@@ -43,6 +44,7 @@ import { updateNotzFields } from "@/app/actions/notz-actions";
 import { FieldInput } from "./field-inputs";
 
 const FIELD_ICONS: Record<FieldType, React.ReactNode> = {
+  label: <TextTIcon weight="bold" className="size-4" />,
   text: <TextAaIcon weight="bold" className="size-4" />,
   number: <HashIcon weight="bold" className="size-4" />,
   rating: <StarIcon weight="bold" className="size-4" />,
@@ -160,11 +162,11 @@ export function NotzWorkspace({
   );
 
   return (
-    <section className="mx-auto flex w-full max-w-6xl flex-col gap-3 sm:gap-6">
+    <section className="mx-auto flex w-full max-w-6xl flex-col gap-2 sm:gap-6">
       {/* Header */}
-      <div className="neo-panel flex flex-col gap-3 bg-card p-4 shadow-[4px_4px_0_0_var(--color-foreground)] sm:flex-row sm:items-center sm:justify-between sm:p-5 sm:shadow-[6px_6px_0_0_var(--color-foreground)]">
+      <div className="neo-panel flex flex-col gap-3 bg-card p-3 shadow-[3px_3px_0_0_var(--color-foreground)] sm:flex-row sm:items-center sm:justify-between sm:p-5 sm:shadow-[6px_6px_0_0_var(--color-foreground)]">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-black uppercase tracking-[0.18em] text-foreground sm:text-3xl">
+          <h1 className="text-xl font-black uppercase tracking-[0.18em] text-foreground sm:text-3xl">
             {notzName}
           </h1>
           {featured && (
@@ -213,7 +215,7 @@ export function NotzWorkspace({
           onDragEnd={handleDragEnd}
         >
           <SortableContext items={fieldIds} strategy={verticalListSortingStrategy}>
-            <div className="grid gap-3 sm:gap-4">
+            <div className="grid gap-2 sm:gap-4">
               {fields.map((field) => (
                 <SortableFieldCard
                   key={field.id}
@@ -241,7 +243,7 @@ export function NotzWorkspace({
           </DragOverlay>
         </DndContext>
       ) : (
-        <div className="neo-panel bg-card p-6 text-center shadow-[4px_4px_0_0_var(--color-foreground)] sm:p-10 sm:shadow-[6px_6px_0_0_var(--color-foreground)]">
+        <div className="neo-panel bg-card p-6 text-center shadow-[3px_3px_0_0_var(--color-foreground)] sm:p-10 sm:shadow-[6px_6px_0_0_var(--color-foreground)]">
           <p className="text-sm font-bold uppercase tracking-[0.14em] text-foreground/60">
             No fields defined for this notz yet.
           </p>
@@ -250,7 +252,7 @@ export function NotzWorkspace({
 
       {/* Add Field */}
       {showTypePicker ? (
-        <div className="neo-panel bg-card p-4 shadow-[4px_4px_0_0_var(--color-foreground)] sm:p-5 sm:shadow-[6px_6px_0_0_var(--color-foreground)]">
+        <div className="neo-panel bg-card p-3 shadow-[3px_3px_0_0_var(--color-foreground)] sm:p-5 sm:shadow-[6px_6px_0_0_var(--color-foreground)]">
           <div className="mb-3 flex items-center justify-between">
             <span className="text-xs font-black uppercase tracking-[0.16em] text-foreground">
               Pick a field type
@@ -285,7 +287,7 @@ export function NotzWorkspace({
           type="button"
           onClick={() => setShowTypePicker(true)}
           disabled={isPending}
-          className="neo-panel flex w-full items-center justify-center gap-2 border-dashed bg-card p-4 text-xs font-black uppercase tracking-[0.16em] text-foreground/60 shadow-[4px_4px_0_0_var(--color-foreground)] transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50 sm:shadow-[6px_6px_0_0_var(--color-foreground)]"
+          className="neo-panel flex w-full items-center justify-center gap-2 border-dashed bg-card p-3 text-xs font-black uppercase tracking-[0.16em] text-foreground/60 shadow-[3px_3px_0_0_var(--color-foreground)] transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50 sm:p-4 sm:shadow-[6px_6px_0_0_var(--color-foreground)]"
         >
           <PlusIcon weight="bold" className="size-4" />
           Add Field
@@ -334,52 +336,65 @@ function SortableFieldCard({
       <div
         ref={setNodeRef}
         style={style}
-        className={`neo-panel overflow-hidden bg-card shadow-[4px_4px_0_0_var(--color-foreground)] sm:shadow-[6px_6px_0_0_var(--color-foreground)] ${
+        className={`neo-panel overflow-hidden bg-card shadow-[3px_3px_0_0_var(--color-foreground)] sm:shadow-[6px_6px_0_0_var(--color-foreground)] ${
           isDragging ? "z-50 opacity-90 shadow-[8px_8px_0_0_var(--color-foreground)]" : ""
         }`}
       >
         <div className="relative">
-          <div className="absolute left-2 top-2 z-10 flex gap-1">
+          <div className="absolute left-1.5 top-1.5 z-10 flex gap-1 sm:left-2 sm:top-2">
             <button
               type="button"
               className="inline-flex items-center justify-center border-2 border-foreground bg-card p-1 text-foreground/60 transition-colors hover:text-foreground"
               {...attributes}
               {...listeners}
-              aria-label={`Reorder ${field.label}`}
+              aria-label={`Reorder ${field.label || "image"}`}
             >
               <DotsSixVerticalIcon weight="bold" className="size-4" />
             </button>
           </div>
-          <button
-            type="button"
-            onClick={() => setIsImageEditing((current) => !current)}
-            disabled={disabled}
-            className="absolute right-2 top-2 z-10 inline-flex items-center justify-center border-2 border-foreground bg-card p-1 text-foreground transition-colors hover:bg-foreground hover:text-background disabled:opacity-50"
-            aria-label={`${isImageEditing ? "Close" : "Edit"} image ${field.label}`}
-          >
-            <PencilSimpleIcon weight="bold" className="size-4" />
-          </button>
+          <div className="absolute right-1.5 top-1.5 z-10 flex gap-1 sm:right-2 sm:top-2">
+            <button
+              type="button"
+              onClick={() => setIsImageEditing((current) => !current)}
+              disabled={disabled}
+              className="inline-flex items-center justify-center border-2 border-foreground bg-card p-1 text-foreground transition-colors hover:bg-foreground hover:text-background disabled:opacity-50"
+              aria-label={`${isImageEditing ? "Close" : "Edit"} image ${field.label || "field"}`}
+            >
+              <PencilSimpleIcon weight="bold" className="size-4" />
+            </button>
+            {imageValue && (
+              <button
+                type="button"
+                onClick={() => onValueChange(undefined)}
+                disabled={disabled}
+                className="inline-flex items-center justify-center border-2 border-foreground bg-card p-1 text-destructive transition-colors hover:bg-destructive hover:text-primary-foreground disabled:opacity-50"
+                aria-label="Remove image"
+              >
+                <XIcon weight="bold" className="size-4" />
+              </button>
+            )}
+          </div>
 
           {imageValue ? (
-            <div className="bg-background p-2 sm:p-3">
+            <div className="bg-background p-1.5 sm:p-3">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={imageValue}
-                alt={field.label}
-                className="max-h-128 w-full object-contain"
+                alt={field.label || "Image"}
+                className="max-h-80 w-full object-contain sm:max-h-128"
               />
             </div>
           ) : (
-            <div className="flex min-h-48 items-center justify-center bg-muted px-4 py-12 text-center">
+            <div className="flex min-h-32 items-center justify-center bg-muted px-4 py-8 text-center sm:min-h-48 sm:py-12">
               <span className="text-xs font-black uppercase tracking-[0.16em] text-foreground/45">
-                Add an image for {field.label}
+                {field.label ? `Add an image for ${field.label}` : "Add an image"}
               </span>
             </div>
           )}
         </div>
 
         {isImageEditing && (
-          <div className="border-t-2 border-foreground/20 px-3 py-3 sm:px-4 sm:py-4">
+          <div className="border-t-2 border-foreground/20 px-2.5 py-2.5 sm:px-4 sm:py-4">
             <FieldInput
               field={field}
               onChange={onValueChange}
@@ -395,12 +410,12 @@ function SortableFieldCard({
     <div
       ref={setNodeRef}
       style={style}
-      className={`neo-panel bg-card shadow-[4px_4px_0_0_var(--color-foreground)] sm:shadow-[6px_6px_0_0_var(--color-foreground)] ${
+      className={`neo-panel bg-card shadow-[3px_3px_0_0_var(--color-foreground)] sm:shadow-[6px_6px_0_0_var(--color-foreground)] ${
         isDragging ? "z-50 opacity-90 shadow-[8px_8px_0_0_var(--color-foreground)]" : ""
       }`}
     >
       {/* Field header */}
-      <div className="flex items-center gap-2 border-b-2 border-foreground/20 px-3 py-2.5 sm:px-4">
+      <div className="flex items-center gap-1.5 border-b-2 border-foreground/20 px-2.5 py-2 sm:gap-2 sm:px-4 sm:py-2.5">
         <button
           type="button"
           className="shrink-0 cursor-grab touch-none p-1 text-foreground/40 transition-colors hover:text-foreground active:cursor-grabbing"
@@ -422,13 +437,15 @@ function SortableFieldCard({
       </div>
 
       {/* Field input */}
-      <div className="px-3 py-3 sm:px-4 sm:py-4">
-        <FieldInput
-          field={field}
-          onChange={onValueChange}
-          disabled={disabled}
-        />
-      </div>
+      {field.type !== "label" && (
+        <div className="px-2.5 py-2.5 sm:px-4 sm:py-4">
+          <FieldInput
+            field={field}
+            onChange={onValueChange}
+            disabled={disabled}
+          />
+        </div>
+      )}
     </div>
   );
 }
