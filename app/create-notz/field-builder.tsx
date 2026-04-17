@@ -8,18 +8,15 @@ import {
   useSensor,
   useSensors,
   DragOverlay,
-  pointerWithin,
-  rectIntersection,
   type DragStartEvent,
   type DragOverEvent,
   type DragEndEvent,
-  type CollisionDetection,
+  closestCenter,
 } from "@dnd-kit/core";
 import {
   SortableContext,
   sortableKeyboardCoordinates,
   useSortable,
-  horizontalListSortingStrategy,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -37,18 +34,14 @@ import {
   TrashIcon,
   ArrowUpIcon,
   ArrowDownIcon,
-  ArrowLeftIcon,
-  ArrowRightIcon,
   PlusIcon,
   XIcon,
-  ArrowsInLineHorizontalIcon,
-  ArrowsOutLineHorizontalIcon,
 } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import type { NotzField, FieldType, FieldRow as FieldRowType } from "@/lib/models/notz";
-import { FIELD_TYPES, FIELD_TYPE_LABELS, groupFieldsIntoRows, flattenRows } from "@/lib/models/notz";
+import type { NotzField, FieldType } from "@/lib/models/notz";
+import { FIELD_TYPES, FIELD_TYPE_LABELS } from "@/lib/models/notz";
 import { compressImageFile } from "@/lib/utils/image-field";
 
 const FIELD_ICONS: Record<FieldType, React.ReactNode> = {
@@ -76,17 +69,16 @@ interface FieldBuilderProps {
 export function FieldBuilder({ fields, onChange, disabled }: FieldBuilderProps) {
   const [showTypePicker, setShowTypePicker] = useState(false);
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [dragRows, setDragRows] = useState<FieldRowType[] | null>(null);
-  const dragRowsRef = useRef<FieldRowType[] | null>(null);
+  const [dragFields, setDragFields] = useState<NotzField[] | null>(null);
+  const dragFieldsRef = useRef<NotzField[] | null>(null);
   const onChangeRef = useRef(onChange);
   onChangeRef.current = onChange;
 
-  const computedRows = useMemo(() => groupFieldsIntoRows(fields), [fields]);
-  const rows = dragRows ?? computedRows;
-  const allFields = useMemo(() => rows.flatMap((r) => r.fields), [rows]);
+  const currentFields = dragFields ?? fields;
+  const fieldIds = useMemo(() => currentFields.map((f) => f.id), [currentFields]);
   const activeField = useMemo(
-    () => (activeId ? allFields.find((f) => f.id === activeId) ?? null : null),
-    [activeId, allFields]
+    () => (activeId ? currentFields.find((f) => f.id === activeId) ?? null : null),
+    [activeId, currentFields]
   );
 
   const sensors = useSensors(
@@ -94,145 +86,38 @@ export function FieldBuilder({ fields, onChange, disabled }: FieldBuilderProps) 
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  const emitChange = useCallback((newRows: FieldRowType[]) => {
-    onChangeRef.current(flattenRows(newRows));
-  }, []);
-
-  const findField = (fieldId: string, inRows?: FieldRowType[]) => {
-    const source = inRows ?? rows;
-    for (let ri = 0; ri < source.length; ri++) {
-      const ci = source[ri].fields.findIndex((f) => f.id === fieldId);
-      if (ci !== -1) return { rowIndex: ri, colIndex: ci };
-    }
-    return null;
-  };
-
-  const customCollision: CollisionDetection = useCallback((args) => {
-    const pointer = pointerWithin(args);
-    if (pointer.length > 0) return pointer;
-    return rectIntersection(args);
-  }, []);
-
   const handleDragStart = useCallback((event: DragStartEvent) => {
     setActiveId(event.active.id as string);
-    const currentRows = groupFieldsIntoRows(fields);
-    setDragRows(currentRows);
-    dragRowsRef.current = currentRows;
+    setDragFields([...fields]);
+    dragFieldsRef.current = [...fields];
   }, [fields]);
 
   const handleDragOver = useCallback((event: DragOverEvent) => {
     const { active, over } = event;
-    if (!over) return;
+    if (!over || active.id === over.id) return;
 
-    const draggedId = active.id as string;
-    const overId = over.id as string;
-    if (draggedId === overId) return;
-
-    // Determine if pointer is on the left/right edge of the target (merge zone)
-    const overRect = over.rect;
-    const activeTranslated = active.rect.current.translated;
-    let isMergeZone = false;
-    if (overRect && activeTranslated) {
-      const activeCenterX = activeTranslated.left + activeTranslated.width / 2;
-      const edgeThreshold = overRect.width * 0.25;
-      isMergeZone =
-        activeCenterX < overRect.left + edgeThreshold ||
-        activeCenterX > overRect.left + overRect.width - edgeThreshold;
-    }
-
-    setDragRows((prev) => {
+    setDragFields((prev) => {
       if (!prev) return prev;
+      const activeIdx = prev.findIndex((f) => f.id === active.id);
+      const overIdx = prev.findIndex((f) => f.id === over.id);
+      if (activeIdx === -1 || overIdx === -1 || activeIdx === overIdx) return prev;
 
-      const activeLoc = (() => {
-        for (let ri = 0; ri < prev.length; ri++) {
-          const ci = prev[ri].fields.findIndex((f) => f.id === draggedId);
-          if (ci !== -1) return { rowIndex: ri, colIndex: ci };
-        }
-        return null;
-      })();
-      const overLoc = (() => {
-        for (let ri = 0; ri < prev.length; ri++) {
-          const ci = prev[ri].fields.findIndex((f) => f.id === overId);
-          if (ci !== -1) return { rowIndex: ri, colIndex: ci };
-        }
-        return null;
-      })();
-
-      if (!activeLoc || !overLoc) return prev;
-
-      if (activeLoc.rowIndex === overLoc.rowIndex) {
-        const row = prev[activeLoc.rowIndex];
-        const newFields = [...row.fields];
-        const [moved] = newFields.splice(activeLoc.colIndex, 1);
-        newFields.splice(overLoc.colIndex, 0, moved);
-        const result = prev.map((r, i) =>
-          i === activeLoc.rowIndex ? { ...r, fields: newFields } : r
-        );
-        dragRowsRef.current = result;
-        return result;
-      }
-
-      // Different rows
-      const sourceRow = prev[activeLoc.rowIndex];
-      const targetRow = prev[overLoc.rowIndex];
-
-      // If dragged to the left/right edge → merge (place side by side)
-      if (isMergeZone) {
-        const field = sourceRow.fields[activeLoc.colIndex];
-        const result = prev
-          .map((r, i) => {
-            if (i === activeLoc.rowIndex) {
-              return { ...r, fields: r.fields.filter((f) => f.id !== draggedId) };
-            }
-            if (i === overLoc.rowIndex) {
-              const newFields = [...r.fields];
-              newFields.splice(overLoc.colIndex, 0, field);
-              return { ...r, fields: newFields };
-            }
-            return r;
-          })
-          .filter((r) => r.fields.length > 0);
-        dragRowsRef.current = result;
-        return result;
-      }
-
-      // Dragged to center → reorder rows
-      if (sourceRow.fields.length === 1) {
-        const result = [...prev];
-        const [moved] = result.splice(activeLoc.rowIndex, 1);
-        result.splice(overLoc.rowIndex, 0, moved);
-        dragRowsRef.current = result;
-        return result;
-      }
-
-      // Source is multi-field row: extract field into its own row at target position
-      const field = sourceRow.fields[activeLoc.colIndex];
-      const result = prev
-        .map((r, i) => {
-          if (i === activeLoc.rowIndex) {
-            return { ...r, fields: r.fields.filter((f) => f.id !== draggedId) };
-          }
-          return r;
-        })
-        .filter((r) => r.fields.length > 0);
-      const newTargetIdx = result.findIndex((r) =>
-        r.fields.some((f) => f.id === overId)
-      );
-      const insertIdx = newTargetIdx !== -1 ? newTargetIdx : result.length;
-      result.splice(insertIdx, 0, { rowIndex: 0, fields: [field] });
-      dragRowsRef.current = result;
+      const result = [...prev];
+      const [moved] = result.splice(activeIdx, 1);
+      result.splice(overIdx, 0, moved);
+      dragFieldsRef.current = result;
       return result;
     });
   }, []);
 
   const handleDragEnd = useCallback(() => {
-    const finalRows = dragRowsRef.current;
-    if (finalRows) {
-      onChangeRef.current(flattenRows(finalRows));
+    const final = dragFieldsRef.current;
+    if (final) {
+      onChangeRef.current(final.map((f, i) => ({ ...f, row: i, column: 0 })));
     }
     setActiveId(null);
-    setDragRows(null);
-    dragRowsRef.current = null;
+    setDragFields(null);
+    dragFieldsRef.current = null;
   }, []);
 
   const addField = (type: FieldType) => {
@@ -244,89 +129,30 @@ export function FieldBuilder({ fields, onChange, disabled }: FieldBuilderProps) 
       ...(type === "tag" ? { options: [] } : {}),
       ...(type === "list" ? { checkable: false } : {}),
     };
-    emitChange([...rows, { rowIndex: rows.length, fields: [newField] }]);
+    onChange([...fields, newField]);
     setShowTypePicker(false);
   };
 
   const updateField = (fieldId: string, patch: Partial<NotzField>) => {
-    emitChange(
-      rows.map((row) => ({
-        ...row,
-        fields: row.fields.map((f) => (f.id === fieldId ? { ...f, ...patch } : f)),
-      }))
-    );
+    onChange(fields.map((f) => (f.id === fieldId ? { ...f, ...patch } : f)));
   };
 
   const removeField = (fieldId: string) => {
-    emitChange(
-      rows
-        .map((row) => ({ ...row, fields: row.fields.filter((f) => f.id !== fieldId) }))
-        .filter((row) => row.fields.length > 0)
-    );
+    onChange(fields.filter((f) => f.id !== fieldId));
   };
 
-  const moveRowUp = (rowIdx: number) => {
-    if (rowIdx === 0) return;
-    const newRows = [...rows];
-    [newRows[rowIdx - 1], newRows[rowIdx]] = [newRows[rowIdx], newRows[rowIdx - 1]];
-    emitChange(newRows);
+  const moveUp = (idx: number) => {
+    if (idx === 0) return;
+    const next = [...fields];
+    [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+    onChange(next);
   };
 
-  const moveRowDown = (rowIdx: number) => {
-    if (rowIdx >= rows.length - 1) return;
-    const newRows = [...rows];
-    [newRows[rowIdx], newRows[rowIdx + 1]] = [newRows[rowIdx + 1], newRows[rowIdx]];
-    emitChange(newRows);
-  };
-
-  const mergeWithRowAbove = (fieldId: string) => {
-    const loc = findField(fieldId);
-    if (!loc || loc.rowIndex === 0) return;
-    const field = rows[loc.rowIndex].fields[loc.colIndex];
-    const newRows = rows.map((r, i) => {
-      if (i === loc.rowIndex) {
-        return { ...r, fields: r.fields.filter((f) => f.id !== fieldId) };
-      }
-      if (i === loc.rowIndex - 1) {
-        return { ...r, fields: [...r.fields, field] };
-      }
-      return r;
-    }).filter((r) => r.fields.length > 0);
-    emitChange(newRows);
-  };
-
-  const splitToOwnRow = (fieldId: string) => {
-    const loc = findField(fieldId);
-    if (!loc) return;
-    const sourceRow = rows[loc.rowIndex];
-    if (sourceRow.fields.length <= 1) return;
-    const field = sourceRow.fields[loc.colIndex];
-    const newRows = [...rows];
-    newRows[loc.rowIndex] = {
-      ...sourceRow,
-      fields: sourceRow.fields.filter((f) => f.id !== fieldId),
-    };
-    newRows.splice(loc.rowIndex + 1, 0, { rowIndex: 0, fields: [field] });
-    emitChange(newRows);
-  };
-
-  const moveFieldLeft = (fieldId: string) => {
-    const loc = findField(fieldId);
-    if (!loc || loc.colIndex === 0) return;
-    const row = rows[loc.rowIndex];
-    const newFields = [...row.fields];
-    [newFields[loc.colIndex - 1], newFields[loc.colIndex]] = [newFields[loc.colIndex], newFields[loc.colIndex - 1]];
-    emitChange(rows.map((r, i) => (i === loc.rowIndex ? { ...r, fields: newFields } : r)));
-  };
-
-  const moveFieldRight = (fieldId: string) => {
-    const loc = findField(fieldId);
-    if (!loc) return;
-    const row = rows[loc.rowIndex];
-    if (loc.colIndex >= row.fields.length - 1) return;
-    const newFields = [...row.fields];
-    [newFields[loc.colIndex], newFields[loc.colIndex + 1]] = [newFields[loc.colIndex + 1], newFields[loc.colIndex]];
-    emitChange(rows.map((r, i) => (i === loc.rowIndex ? { ...r, fields: newFields } : r)));
+  const moveDown = (idx: number) => {
+    if (idx >= fields.length - 1) return;
+    const next = [...fields];
+    [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+    onChange(next);
   };
 
   return (
@@ -342,32 +168,30 @@ export function FieldBuilder({ fields, onChange, disabled }: FieldBuilderProps) 
 
       <DndContext
         sensors={sensors}
-        collisionDetection={customCollision}
+        collisionDetection={closestCenter}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        {rows.length > 0 && (
-          <div className="space-y-2">
-            {rows.map((row, rowIdx) => (
-              <BuilderRow
-                key={row.fields.map((f) => f.id).join(",")}
-                row={row}
-                rowIdx={rowIdx}
-                totalRows={rows.length}
-                onUpdate={updateField}
-                onRemove={removeField}
-                onMoveRowUp={() => moveRowUp(rowIdx)}
-                onMoveRowDown={() => moveRowDown(rowIdx)}
-                onMergeUp={mergeWithRowAbove}
-                onSplitOut={splitToOwnRow}
-                onMoveLeft={moveFieldLeft}
-                onMoveRight={moveFieldRight}
-                disabled={disabled}
-              />
-            ))}
-          </div>
-        )}
+        <SortableContext items={fieldIds} strategy={verticalListSortingStrategy}>
+          {currentFields.length > 0 && (
+            <div className="space-y-2">
+              {currentFields.map((field, idx) => (
+                <BuilderFieldItem
+                  key={field.id}
+                  field={field}
+                  idx={idx}
+                  total={currentFields.length}
+                  onUpdate={(patch) => updateField(field.id, patch)}
+                  onRemove={() => removeField(field.id)}
+                  onMoveUp={() => moveUp(idx)}
+                  onMoveDown={() => moveDown(idx)}
+                  disabled={disabled}
+                />
+              ))}
+            </div>
+          )}
+        </SortableContext>
         <DragOverlay>
           {activeField ? (
             <div className="border-2 border-foreground bg-card px-3 py-2 opacity-85 shadow-[4px_4px_0_0_var(--color-foreground)]">
@@ -433,202 +257,26 @@ export function FieldBuilder({ fields, onChange, disabled }: FieldBuilderProps) 
   );
 }
 
-interface BuilderRowProps {
-  row: FieldRowType;
-  rowIdx: number;
-  totalRows: number;
-  onUpdate: (fieldId: string, patch: Partial<NotzField>) => void;
-  onRemove: (fieldId: string) => void;
-  onMoveRowUp: () => void;
-  onMoveRowDown: () => void;
-  onMergeUp: (fieldId: string) => void;
-  onSplitOut: (fieldId: string) => void;
-  onMoveLeft: (fieldId: string) => void;
-  onMoveRight: (fieldId: string) => void;
-  disabled?: boolean;
-}
-
-function BuilderRow({
-  row,
-  rowIdx,
-  totalRows,
-  onUpdate,
-  onRemove,
-  onMoveRowUp,
-  onMoveRowDown,
-  onMergeUp,
-  onSplitOut,
-  onMoveLeft,
-  onMoveRight,
-  disabled,
-}: BuilderRowProps) {
-  const isMulti = row.fields.length > 1;
-
-  if (!isMulti) {
-    const field = row.fields[0];
-    return (
-      <SortableContext items={[field.id]} strategy={verticalListSortingStrategy}>
-        <BuilderFieldItem
-          field={field}
-          onUpdate={(patch) => onUpdate(field.id, patch)}
-          onRemove={() => onRemove(field.id)}
-          disabled={disabled}
-          rowControls={
-            <div className="flex shrink-0 items-center gap-0.5">
-              {rowIdx > 0 && (
-                <button
-                  type="button"
-                  onClick={() => onMergeUp(field.id)}
-                  disabled={disabled}
-                  className="inline-flex items-center justify-center p-1 text-foreground/50 transition-colors hover:text-foreground disabled:opacity-30"
-                  aria-label="Place next to field above"
-                  title="Place next to field above"
-                >
-                  <ArrowsInLineHorizontalIcon weight="bold" className="size-3.5" />
-                </button>
-              )}
-              <button
-                type="button"
-                onClick={onMoveRowUp}
-                disabled={disabled || rowIdx === 0}
-                className="inline-flex items-center justify-center p-1 text-foreground/50 transition-colors hover:text-foreground disabled:opacity-30"
-                aria-label="Move up"
-              >
-                <ArrowUpIcon weight="bold" className="size-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={onMoveRowDown}
-                disabled={disabled || rowIdx === totalRows - 1}
-                className="inline-flex items-center justify-center p-1 text-foreground/50 transition-colors hover:text-foreground disabled:opacity-30"
-                aria-label="Move down"
-              >
-                <ArrowDownIcon weight="bold" className="size-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => onRemove(field.id)}
-                disabled={disabled}
-                className="inline-flex items-center justify-center p-1 text-destructive/70 transition-colors hover:text-destructive disabled:opacity-30"
-                aria-label="Remove field"
-              >
-                <TrashIcon weight="bold" className="size-3.5" />
-              </button>
-            </div>
-          }
-        />
-      </SortableContext>
-    );
-  }
-
-  // Multi-field row
-  return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between px-1">
-        <span className="text-[0.55rem] font-black uppercase tracking-[0.14em] text-foreground/40">
-          Row {rowIdx + 1} · {row.fields.length} fields
-        </span>
-        <div className="flex items-center gap-0.5">
-          <button
-            type="button"
-            onClick={onMoveRowUp}
-            disabled={disabled || rowIdx === 0}
-            className="inline-flex items-center justify-center p-0.5 text-foreground/40 transition-colors hover:text-foreground disabled:opacity-30"
-            aria-label="Move row up"
-          >
-            <ArrowUpIcon weight="bold" className="size-3" />
-          </button>
-          <button
-            type="button"
-            onClick={onMoveRowDown}
-            disabled={disabled || rowIdx === totalRows - 1}
-            className="inline-flex items-center justify-center p-0.5 text-foreground/40 transition-colors hover:text-foreground disabled:opacity-30"
-            aria-label="Move row down"
-          >
-            <ArrowDownIcon weight="bold" className="size-3" />
-          </button>
-        </div>
-      </div>
-      <SortableContext
-        items={row.fields.map((f) => f.id)}
-        strategy={horizontalListSortingStrategy}
-      >
-        <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 sm:gap-2">
-          {row.fields.map((field, colIdx) => (
-          <div key={field.id} className="min-w-0 overflow-hidden">
-            <BuilderFieldItem
-              field={field}
-              onUpdate={(patch) => onUpdate(field.id, patch)}
-              onRemove={() => onRemove(field.id)}
-              disabled={disabled}
-              rowControls={
-                <div className="flex shrink-0 items-center gap-0.5">
-                  {row.fields.length > 1 && colIdx > 0 && (
-                    <button
-                      type="button"
-                      onClick={() => onMoveLeft(field.id)}
-                      disabled={disabled}
-                      className="inline-flex items-center justify-center p-1 text-foreground/50 transition-colors hover:text-foreground disabled:opacity-30"
-                      aria-label="Move left"
-                    >
-                      <ArrowLeftIcon weight="bold" className="size-3.5" />
-                    </button>
-                  )}
-                  {row.fields.length > 1 && colIdx < row.fields.length - 1 && (
-                    <button
-                      type="button"
-                      onClick={() => onMoveRight(field.id)}
-                      disabled={disabled}
-                      className="inline-flex items-center justify-center p-1 text-foreground/50 transition-colors hover:text-foreground disabled:opacity-30"
-                      aria-label="Move right"
-                    >
-                      <ArrowRightIcon weight="bold" className="size-3.5" />
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => onSplitOut(field.id)}
-                    disabled={disabled}
-                    className="inline-flex items-center justify-center p-1 text-foreground/50 transition-colors hover:text-foreground disabled:opacity-30"
-                    aria-label="Move to own row"
-                    title="Move to its own row"
-                  >
-                    <ArrowsOutLineHorizontalIcon weight="bold" className="size-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => onRemove(field.id)}
-                    disabled={disabled}
-                    className="inline-flex items-center justify-center p-1 text-destructive/70 transition-colors hover:text-destructive disabled:opacity-30"
-                    aria-label="Remove field"
-                  >
-                    <TrashIcon weight="bold" className="size-3.5" />
-                  </button>
-                </div>
-              }
-            />
-          </div>
-        ))}
-        </div>
-      </SortableContext>
-    </div>
-  );
-}
-
 interface BuilderFieldItemProps {
   field: NotzField;
+  idx: number;
+  total: number;
   onUpdate: (patch: Partial<NotzField>) => void;
   onRemove: () => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
   disabled?: boolean;
-  rowControls: React.ReactNode;
 }
 
 function BuilderFieldItem({
   field,
+  idx,
+  total,
   onUpdate,
   onRemove,
+  onMoveUp,
+  onMoveDown,
   disabled,
-  rowControls,
 }: BuilderFieldItemProps) {
   const {
     attributes,
@@ -706,7 +354,35 @@ function BuilderFieldItem({
           className="min-w-0 flex-1 border-0 bg-transparent px-0 py-0 text-sm font-medium shadow-none focus:border-0 focus:shadow-none"
         />
 
-        {rowControls}
+        <div className="flex shrink-0 items-center gap-0.5">
+          <button
+            type="button"
+            onClick={onMoveUp}
+            disabled={disabled || idx === 0}
+            className="inline-flex items-center justify-center p-1 text-foreground/50 transition-colors hover:text-foreground disabled:opacity-30"
+            aria-label="Move up"
+          >
+            <ArrowUpIcon weight="bold" className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={onMoveDown}
+            disabled={disabled || idx === total - 1}
+            className="inline-flex items-center justify-center p-1 text-foreground/50 transition-colors hover:text-foreground disabled:opacity-30"
+            aria-label="Move down"
+          >
+            <ArrowDownIcon weight="bold" className="size-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={onRemove}
+            disabled={disabled}
+            className="inline-flex items-center justify-center p-1 text-destructive/70 transition-colors hover:text-destructive disabled:opacity-30"
+            aria-label="Remove field"
+          >
+            <TrashIcon weight="bold" className="size-3.5" />
+          </button>
+        </div>
       </div>
 
       {/* Rating max config */}

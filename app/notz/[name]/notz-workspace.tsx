@@ -11,16 +11,13 @@ import {
   type DragOverEvent,
   type DragStartEvent,
   DragOverlay,
-  pointerWithin,
-  rectIntersection,
-  type CollisionDetection,
+  closestCenter,
 } from "@dnd-kit/core";
 import {
   SortableContext,
   sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
-  horizontalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
@@ -37,15 +34,13 @@ import {
   FloppyDiskIcon,
   CheckIcon,
   PencilSimpleIcon,
-  ArrowsOutLineHorizontalIcon,
-  ArrowsInLineHorizontalIcon,
+  PlusIcon,
+  XIcon,
 } from "@phosphor-icons/react";
-import type { NotzField, FieldType, FieldRow } from "@/lib/models/notz";
-import { FIELD_TYPE_LABELS, groupFieldsIntoRows, flattenRows } from "@/lib/models/notz";
+import type { NotzField, FieldType } from "@/lib/models/notz";
+import { FIELD_TYPES, FIELD_TYPE_LABELS } from "@/lib/models/notz";
 import { updateNotzFields } from "@/app/actions/notz-actions";
 import { FieldInput } from "./field-inputs";
-
-const noop = () => {};
 
 const FIELD_ICONS: Record<FieldType, React.ReactNode> = {
   text: <TextAaIcon weight="bold" className="size-4" />,
@@ -72,106 +67,43 @@ export function NotzWorkspace({
   featured,
   initialFields,
 }: NotzWorkspaceProps) {
-  const [rows, setRows] = useState<FieldRow[]>(() => groupFieldsIntoRows(initialFields));
+  const [fields, setFields] = useState<NotzField[]>(initialFields);
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [saveVersion, setSaveVersion] = useState(0);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [showTypePicker, setShowTypePicker] = useState(false);
   const savedTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
 
-  const allFields = useMemo(() => rows.flatMap((r) => r.fields), [rows]);
+  const fieldIds = useMemo(() => fields.map((f) => f.id), [fields]);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: {
-        distance: 8,
-      },
-    }),
-    useSensor(KeyboardSensor, {
-      coordinateGetter: sortableKeyboardCoordinates,
-    })
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
   const updateFieldValue = useCallback((fieldId: string, value: NotzField["value"]) => {
-    setRows((prev) =>
-      prev.map((row) => ({
-        ...row,
-        fields: row.fields.map((f) => (f.id === fieldId ? { ...f, value } : f)),
-      }))
+    setFields((prev) =>
+      prev.map((f) => (f.id === fieldId ? { ...f, value } : f))
     );
     setDirty(true);
     setSaved(false);
   }, []);
 
-  const findFieldLocation = useCallback((fieldId: string, currentRows: FieldRow[]) => {
-    for (let ri = 0; ri < currentRows.length; ri++) {
-      const ci = currentRows[ri].fields.findIndex((f) => f.id === fieldId);
-      if (ci !== -1) return { rowIndex: ri, colIndex: ci };
-    }
-    return null;
-  }, []);
-
-  // Merge field with the row above (make side-by-side)
-  const mergeWithRowAbove = useCallback((fieldId: string) => {
-    setRows((prev) => {
-      const loc = findFieldLocation(fieldId, prev);
-      if (!loc || loc.rowIndex === 0) return prev;
-
-      const field = prev[loc.rowIndex].fields[loc.colIndex];
-      const sourceRow = prev[loc.rowIndex];
-      const targetRowIndex = loc.rowIndex - 1;
-
-      const newRows = [...prev];
-      // Add field to end of target row
-      newRows[targetRowIndex] = {
-        ...newRows[targetRowIndex],
-        fields: [...newRows[targetRowIndex].fields, field],
-      };
-      // Remove from source row
-      const remaining = sourceRow.fields.filter((f) => f.id !== fieldId);
-      if (remaining.length === 0) {
-        newRows.splice(loc.rowIndex, 1);
-      } else {
-        newRows[loc.rowIndex] = { ...sourceRow, fields: remaining };
-      }
-      return newRows;
-    });
+  const addField = useCallback((type: FieldType) => {
+    const newField: NotzField = {
+      id: `f_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+      label: "",
+      type,
+      ...(type === "rating" ? { max: 5 } : {}),
+      ...(type === "tag" ? { options: [] } : {}),
+      ...(type === "list" ? { checkable: false } : {}),
+    };
+    setFields((prev) => [...prev, newField]);
+    setShowTypePicker(false);
     setDirty(true);
     setSaved(false);
-  }, [findFieldLocation]);
-
-  // Split field into its own row below
-  const splitToOwnRow = useCallback((fieldId: string) => {
-    setRows((prev) => {
-      const loc = findFieldLocation(fieldId, prev);
-      if (!loc) return prev;
-      const sourceRow = prev[loc.rowIndex];
-      if (sourceRow.fields.length <= 1) return prev; // already alone
-
-      const field = sourceRow.fields[loc.colIndex];
-      const newRows = [...prev];
-      newRows[loc.rowIndex] = {
-        ...sourceRow,
-        fields: sourceRow.fields.filter((f) => f.id !== fieldId),
-      };
-      // Insert new row after current
-      newRows.splice(loc.rowIndex + 1, 0, {
-        rowIndex: 0,
-        fields: [field],
-      });
-      return newRows;
-    });
-    setDirty(true);
-    setSaved(false);
-  }, [findFieldLocation]);
-
-  const customCollisionDetection: CollisionDetection = useCallback((args) => {
-    // First try pointer within
-    const pointerCollisions = pointerWithin(args);
-    if (pointerCollisions.length > 0) return pointerCollisions;
-    // Fallback to rect intersection
-    return rectIntersection(args);
   }, []);
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
@@ -180,133 +112,32 @@ export function NotzWorkspace({
 
   const handleDragOver = useCallback((event: DragOverEvent) => {
     const { active, over } = event;
-    if (!over) return;
+    if (!over || active.id === over.id) return;
 
-    const activeFieldId = active.id as string;
-    const overId = over.id as string;
+    setFields((prev) => {
+      const activeIdx = prev.findIndex((f) => f.id === active.id);
+      const overIdx = prev.findIndex((f) => f.id === over.id);
+      if (activeIdx === -1 || overIdx === -1 || activeIdx === overIdx) return prev;
 
-    if (activeFieldId === overId) return;
-
-    // Determine if pointer is on the left/right edge of the target (merge zone)
-    const overRect = over.rect;
-    const activeTranslated = active.rect.current.translated;
-    let isMergeZone = false;
-    if (overRect && activeTranslated) {
-      const activeCenterX = activeTranslated.left + activeTranslated.width / 2;
-      const edgeThreshold = overRect.width * 0.25;
-      isMergeZone =
-        activeCenterX < overRect.left + edgeThreshold ||
-        activeCenterX > overRect.left + overRect.width - edgeThreshold;
-    }
-
-    setRows((prev) => {
-      const activeLoc = findFieldLocation(activeFieldId, prev);
-      if (!activeLoc) return prev;
-
-      // Check if over is a field
-      const overLoc = findFieldLocation(overId, prev);
-      if (!overLoc) {
-        // over might be a row container id like "row-0"
-        const rowMatch = overId.match(/^row-(\d+)$/);
-        if (!rowMatch) return prev;
-        const targetRowIdx = Number(rowMatch[1]);
-        if (targetRowIdx === activeLoc.rowIndex) return prev;
-        if (targetRowIdx >= prev.length) return prev;
-
-        // move field to target row
-        const field = prev[activeLoc.rowIndex].fields[activeLoc.colIndex];
-        const newRows = prev.map((r, i) => {
-          if (i === activeLoc.rowIndex) {
-            return { ...r, fields: r.fields.filter((f) => f.id !== activeFieldId) };
-          }
-          if (i === targetRowIdx) {
-            return { ...r, fields: [...r.fields, field] };
-          }
-          return r;
-        }).filter((r) => r.fields.length > 0);
-
-        return newRows;
-      }
-
-      // Same row, same position — no-op
-      if (activeLoc.rowIndex === overLoc.rowIndex && activeLoc.colIndex === overLoc.colIndex) {
-        return prev;
-      }
-
-      // Both are fields — if in same row, just reorder within row
-      if (activeLoc.rowIndex === overLoc.rowIndex) {
-        const row = prev[activeLoc.rowIndex];
-        const newFields = [...row.fields];
-        const [moved] = newFields.splice(activeLoc.colIndex, 1);
-        newFields.splice(overLoc.colIndex, 0, moved);
-        return prev.map((r, i) =>
-          i === activeLoc.rowIndex ? { ...r, fields: newFields } : r
-        );
-      }
-
-      // Different rows
-      const sourceRow = prev[activeLoc.rowIndex];
-      const targetRow = prev[overLoc.rowIndex];
-
-      // If dragged to the left/right edge → merge (place side by side)
-      if (isMergeZone) {
-        const field = sourceRow.fields[activeLoc.colIndex];
-        const newRows = prev.map((r, i) => {
-          if (i === activeLoc.rowIndex) {
-            return { ...r, fields: r.fields.filter((f) => f.id !== activeFieldId) };
-          }
-          if (i === overLoc.rowIndex) {
-            const newFields = [...r.fields];
-            newFields.splice(overLoc.colIndex, 0, field);
-            return { ...r, fields: newFields };
-          }
-          return r;
-        }).filter((r) => r.fields.length > 0);
-        return newRows;
-      }
-
-      // Dragged to center → reorder rows (move source row to target position)
-      if (sourceRow.fields.length === 1) {
-        const newRows = [...prev];
-        const [moved] = newRows.splice(activeLoc.rowIndex, 1);
-        newRows.splice(overLoc.rowIndex, 0, moved);
-        return newRows;
-      }
-
-      // Source is multi-field row: extract field into its own row at target position
-      const field = sourceRow.fields[activeLoc.colIndex];
-      const newRows = prev
-        .map((r, i) => {
-          if (i === activeLoc.rowIndex) {
-            return { ...r, fields: r.fields.filter((f) => f.id !== activeFieldId) };
-          }
-          return r;
-        })
-        .filter((r) => r.fields.length > 0);
-      // Find where the target row ended up after possible removal
-      const newTargetIdx = newRows.findIndex((r) =>
-        r.fields.some((f) => f.id === overId)
-      );
-      const insertIdx = newTargetIdx !== -1 ? newTargetIdx : newRows.length;
-      newRows.splice(insertIdx, 0, { rowIndex: 0, fields: [field] });
-      return newRows;
+      const result = [...prev];
+      const [moved] = result.splice(activeIdx, 1);
+      result.splice(overIdx, 0, moved);
+      return result;
     });
-  }, [findFieldLocation]);
+  }, []);
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     setActiveId(null);
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-
-    // Final position is already set by handleDragOver
     setDirty(true);
     setSaved(false);
   }, []);
 
   const save = () => {
-    const flatFields = flattenRows(rows);
+    const normalized = fields.map((f, i) => ({ ...f, row: i, column: 0 }));
     startTransition(async () => {
-      const result = await updateNotzFields({ id: notzId, fields: flatFields });
+      const result = await updateNotzFields({ id: notzId, fields: normalized });
       if ("success" in result && result.success) {
         setDirty(false);
         setSaved(true);
@@ -324,8 +155,8 @@ export function NotzWorkspace({
   }, []);
 
   const activeField = useMemo(
-    () => (activeId ? allFields.find((f) => f.id === activeId) ?? null : null),
-    [activeId, allFields]
+    () => (activeId ? fields.find((f) => f.id === activeId) ?? null : null),
+    [activeId, fields]
   );
 
   return (
@@ -342,7 +173,7 @@ export function NotzWorkspace({
             </span>
           )}
         </div>
-        {allFields.length > 0 && (
+        {fields.length > 0 && (
           <button
             type="button"
             onClick={save}
@@ -373,29 +204,27 @@ export function NotzWorkspace({
       </div>
 
       {/* Fields */}
-      {allFields.length > 0 ? (
+      {fields.length > 0 ? (
         <DndContext
           sensors={sensors}
-          collisionDetection={customCollisionDetection}
+          collisionDetection={closestCenter}
           onDragStart={handleDragStart}
           onDragOver={handleDragOver}
           onDragEnd={handleDragEnd}
         >
-          <div className="grid gap-3 sm:gap-4">
-            {rows.map((row, rowIdx) => (
-              <SortableRow
-                key={row.fields[0]?.id ?? `row-${rowIdx}`}
-                row={row}
-                rowIdx={rowIdx}
-                totalRows={rows.length}
-                onValueChange={updateFieldValue}
-                onMergeUp={mergeWithRowAbove}
-                onSplitOut={splitToOwnRow}
-                disabled={isPending}
-                saveVersion={saveVersion}
-              />
-            ))}
-          </div>
+          <SortableContext items={fieldIds} strategy={verticalListSortingStrategy}>
+            <div className="grid gap-3 sm:gap-4">
+              {fields.map((field) => (
+                <SortableFieldCard
+                  key={field.id}
+                  field={field}
+                  onValueChange={(value) => updateFieldValue(field.id, value)}
+                  disabled={isPending}
+                  saveVersion={saveVersion}
+                />
+              ))}
+            </div>
+          </SortableContext>
           <DragOverlay>
             {activeField ? (
               <div className="neo-panel bg-card opacity-80 shadow-[8px_8px_0_0_var(--color-foreground)]">
@@ -418,78 +247,51 @@ export function NotzWorkspace({
           </p>
         </div>
       )}
+
+      {/* Add Field */}
+      {showTypePicker ? (
+        <div className="neo-panel bg-card p-4 shadow-[4px_4px_0_0_var(--color-foreground)] sm:p-5 sm:shadow-[6px_6px_0_0_var(--color-foreground)]">
+          <div className="mb-3 flex items-center justify-between">
+            <span className="text-xs font-black uppercase tracking-[0.16em] text-foreground">
+              Pick a field type
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowTypePicker(false)}
+              className="inline-flex items-center justify-center border-2 border-foreground bg-background p-1 text-foreground transition-colors hover:bg-foreground hover:text-background"
+            >
+              <XIcon weight="bold" className="size-3.5" />
+            </button>
+          </div>
+          <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+            {FIELD_TYPES.map((type) => (
+              <button
+                key={type}
+                type="button"
+                onClick={() => addField(type)}
+                disabled={isPending}
+                className="flex flex-col items-center gap-1.5 border-2 border-foreground bg-background px-2 py-3 text-foreground transition-colors hover:bg-secondary disabled:opacity-50"
+              >
+                {FIELD_ICONS[type]}
+                <span className="text-[0.6rem] font-bold uppercase leading-none tracking-widest">
+                  {FIELD_TYPE_LABELS[type]}
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setShowTypePicker(true)}
+          disabled={isPending}
+          className="neo-panel flex w-full items-center justify-center gap-2 border-dashed bg-card p-4 text-xs font-black uppercase tracking-[0.16em] text-foreground/60 shadow-[4px_4px_0_0_var(--color-foreground)] transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50 sm:shadow-[6px_6px_0_0_var(--color-foreground)]"
+        >
+          <PlusIcon weight="bold" className="size-4" />
+          Add Field
+        </button>
+      )}
     </section>
-  );
-}
-
-interface SortableRowProps {
-  row: FieldRow;
-  rowIdx: number;
-  totalRows: number;
-  onValueChange: (fieldId: string, value: NotzField["value"]) => void;
-  onMergeUp: (fieldId: string) => void;
-  onSplitOut: (fieldId: string) => void;
-  disabled?: boolean;
-  saveVersion: number;
-}
-
-function SortableRow({
-  row,
-  rowIdx,
-  totalRows,
-  onValueChange,
-  onMergeUp,
-  onSplitOut,
-  disabled,
-  saveVersion,
-}: SortableRowProps) {
-  const isMultiField = row.fields.length > 1;
-
-  if (!isMultiField) {
-    // Single field row — render like before, no extra wrapper needed
-    const field = row.fields[0];
-    return (
-      <SortableFieldCard
-        key={field.id}
-        field={field}
-        onValueChange={(value) => onValueChange(field.id, value)}
-        disabled={disabled}
-        saveVersion={saveVersion}
-        canMergeUp={rowIdx > 0}
-        canSplitOut={false}
-        onMergeUp={() => onMergeUp(field.id)}
-        onSplitOut={noop}
-        isInRow={false}
-      />
-    );
-  }
-
-  // Multi-field row — render fields side by side
-  return (
-    <SortableContext
-      items={row.fields.map((f) => f.id)}
-      strategy={horizontalListSortingStrategy}
-    >
-      <div
-        id={`row-${rowIdx}`}
-        className="flex flex-col gap-3 sm:flex-row sm:gap-4"
-      >
-        {row.fields.map((field) => (
-          <SortableFieldCard
-            key={field.id}
-            field={field}
-            onValueChange={(value) => onValueChange(field.id, value)}
-            disabled={disabled}
-            saveVersion={saveVersion}
-            canMergeUp={false}
-            canSplitOut={true}
-            onMergeUp={() => onMergeUp(field.id)}
-            onSplitOut={() => onSplitOut(field.id)}
-            isInRow={true}
-          />
-        ))}
-      </div>
-    </SortableContext>
   );
 }
 
@@ -498,11 +300,6 @@ interface SortableFieldCardProps {
   onValueChange: (value: NotzField["value"]) => void;
   disabled?: boolean;
   saveVersion: number;
-  canMergeUp: boolean;
-  canSplitOut: boolean;
-  onMergeUp: () => void;
-  onSplitOut: () => void;
-  isInRow: boolean;
 }
 
 function SortableFieldCard({
@@ -510,11 +307,6 @@ function SortableFieldCard({
   onValueChange,
   disabled,
   saveVersion,
-  canMergeUp,
-  canSplitOut,
-  onMergeUp,
-  onSplitOut,
-  isInRow,
 }: SortableFieldCardProps) {
   const [isImageEditing, setIsImageEditing] = useState(false);
   const {
@@ -535,32 +327,6 @@ function SortableFieldCard({
     setIsImageEditing(false);
   }, [saveVersion]);
 
-  const mergeButton = canMergeUp && (
-    <button
-      type="button"
-      onClick={onMergeUp}
-      disabled={disabled}
-      className="inline-flex items-center justify-center p-1 text-foreground/40 transition-colors hover:text-foreground disabled:opacity-30"
-      aria-label="Merge with row above"
-      title="Place next to field above"
-    >
-      <ArrowsInLineHorizontalIcon weight="bold" className="size-4" />
-    </button>
-  );
-
-  const splitButton = canSplitOut && (
-    <button
-      type="button"
-      onClick={onSplitOut}
-      disabled={disabled}
-      className="inline-flex items-center justify-center p-1 text-foreground/40 transition-colors hover:text-foreground disabled:opacity-30"
-      aria-label="Move to own row"
-      title="Move to its own row"
-    >
-      <ArrowsOutLineHorizontalIcon weight="bold" className="size-4" />
-    </button>
-  );
-
   if (field.type === "image") {
     const imageValue = typeof field.value === "string" ? field.value : "";
 
@@ -569,8 +335,6 @@ function SortableFieldCard({
         ref={setNodeRef}
         style={style}
         className={`neo-panel overflow-hidden bg-card shadow-[4px_4px_0_0_var(--color-foreground)] sm:shadow-[6px_6px_0_0_var(--color-foreground)] ${
-          isInRow ? "flex-1 min-w-0" : ""
-        } ${
           isDragging ? "z-50 opacity-90 shadow-[8px_8px_0_0_var(--color-foreground)]" : ""
         }`}
       >
@@ -585,8 +349,6 @@ function SortableFieldCard({
             >
               <DotsSixVerticalIcon weight="bold" className="size-4" />
             </button>
-            {mergeButton}
-            {splitButton}
           </div>
           <button
             type="button"
@@ -634,8 +396,6 @@ function SortableFieldCard({
       ref={setNodeRef}
       style={style}
       className={`neo-panel bg-card shadow-[4px_4px_0_0_var(--color-foreground)] sm:shadow-[6px_6px_0_0_var(--color-foreground)] ${
-        isInRow ? "flex-1 min-w-0" : ""
-      } ${
         isDragging ? "z-50 opacity-90 shadow-[8px_8px_0_0_var(--color-foreground)]" : ""
       }`}
     >
@@ -656,13 +416,9 @@ function SortableFieldCard({
         <span className="min-w-0 flex-1 truncate text-sm font-black uppercase tracking-[0.14em] text-foreground">
           {field.label}
         </span>
-        <div className="flex shrink-0 items-center gap-0.5">
-          {mergeButton}
-          {splitButton}
-          <span className="shrink-0 text-[0.6rem] font-bold uppercase tracking-widest text-foreground/40">
-            {FIELD_TYPE_LABELS[field.type]}
-          </span>
-        </div>
+        <span className="shrink-0 text-[0.6rem] font-bold uppercase tracking-widest text-foreground/40">
+          {FIELD_TYPE_LABELS[field.type]}
+        </span>
       </div>
 
       {/* Field input */}
