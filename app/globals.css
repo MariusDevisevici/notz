@@ -165,7 +165,7 @@
 @layer components {
   .neo-panel {
     @apply border-3 border-foreground bg-card;
-    box-shadow: 4px 4px 0 0 var(--foreground);
+    box-shadow: 3px 3px 0 0 var(--foreground);
   }
 
   .neo-panel-lg {

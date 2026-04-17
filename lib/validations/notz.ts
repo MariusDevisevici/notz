@@ -46,7 +46,7 @@ export const notzFieldSchema = z
       .optional(),
   })
   .refine(
-    (field) => field.type === "image" || field.label.length > 0,
+    (field) => field.type === "image" || field.type === "label" || field.label.length > 0,
     { message: "Label is required", path: ["label"] }
   );
 

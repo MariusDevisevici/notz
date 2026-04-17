@@ -18,7 +18,7 @@ export default async function NotzPage({ params }: NotzPageProps) {
   }
 
   return (
-    <main className="px-1.5 py-3 sm:px-6 sm:py-10">
+    <main className="overflow-x-hidden px-2 py-3 sm:px-6 sm:py-10">
       <NotzWorkspace
         notzId={notz.id}
         notzName={notz.name}

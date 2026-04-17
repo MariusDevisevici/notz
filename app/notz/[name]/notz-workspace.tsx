@@ -36,6 +36,7 @@ import {
   CheckIcon,
   PencilSimpleIcon,
   PlusIcon,
+  TrashIcon,
   XIcon,
 } from "@phosphor-icons/react";
 import type { NotzField, FieldType } from "@/lib/models/notz";
@@ -73,6 +74,7 @@ export function NotzWorkspace({
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
   const [dirty, setDirty] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [saveVersion, setSaveVersion] = useState(0);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [showTypePicker, setShowTypePicker] = useState(false);
@@ -91,6 +93,16 @@ export function NotzWorkspace({
     );
     setDirty(true);
     setSaved(false);
+    setSaveError(null);
+  }, []);
+
+  const updateFieldLabel = useCallback((fieldId: string, label: string) => {
+    setFields((prev) =>
+      prev.map((f) => (f.id === fieldId ? { ...f, label } : f))
+    );
+    setDirty(true);
+    setSaved(false);
+    setSaveError(null);
   }, []);
 
   const addField = useCallback((type: FieldType) => {
@@ -104,6 +116,12 @@ export function NotzWorkspace({
     };
     setFields((prev) => [...prev, newField]);
     setShowTypePicker(false);
+    setDirty(true);
+    setSaved(false);
+  }, []);
+
+  const removeField = useCallback((fieldId: string) => {
+    setFields((prev) => prev.filter((f) => f.id !== fieldId));
     setDirty(true);
     setSaved(false);
   }, []);
@@ -138,6 +156,7 @@ export function NotzWorkspace({
 
   const save = () => {
     const normalized = fields.map((f, i) => ({ ...f, row: i, column: 0 }));
+    setSaveError(null);
     startTransition(async () => {
       const result = await updateNotzFields({ id: notzId, fields: normalized });
       if ("success" in result && result.success) {
@@ -146,6 +165,16 @@ export function NotzWorkspace({
         setSaveVersion((current) => current + 1);
         if (savedTimeout.current) clearTimeout(savedTimeout.current);
         savedTimeout.current = setTimeout(() => setSaved(false), 2000);
+      } else if ("error" in result) {
+        const err = result.error;
+        if (typeof err === "string") {
+          setSaveError(err);
+        } else if (err && typeof err === "object") {
+          const msgs = Object.values(err as Record<string, unknown>).flat();
+          setSaveError(msgs.find((m) => typeof m === "string") as string ?? "Validation failed");
+        } else {
+          setSaveError("Failed to save");
+        }
       }
     });
   };
@@ -205,6 +234,12 @@ export function NotzWorkspace({
         )}
       </div>
 
+      {saveError && (
+        <div className="neo-panel border-destructive bg-destructive/10 px-3 py-2.5 text-xs font-black uppercase tracking-[0.14em] text-destructive sm:px-5 sm:py-3">
+          {saveError}
+        </div>
+      )}
+
       {/* Fields */}
       {fields.length > 0 ? (
         <DndContext
@@ -221,6 +256,8 @@ export function NotzWorkspace({
                   key={field.id}
                   field={field}
                   onValueChange={(value) => updateFieldValue(field.id, value)}
+                  onLabelChange={(label) => updateFieldLabel(field.id, label)}
+                  onRemove={() => removeField(field.id)}
                   disabled={isPending}
                   saveVersion={saveVersion}
                 />
@@ -300,6 +337,8 @@ export function NotzWorkspace({
 interface SortableFieldCardProps {
   field: NotzField;
   onValueChange: (value: NotzField["value"]) => void;
+  onLabelChange: (label: string) => void;
+  onRemove: () => void;
   disabled?: boolean;
   saveVersion: number;
 }
@@ -307,6 +346,8 @@ interface SortableFieldCardProps {
 function SortableFieldCard({
   field,
   onValueChange,
+  onLabelChange,
+  onRemove,
   disabled,
   saveVersion,
 }: SortableFieldCardProps) {
@@ -367,12 +408,21 @@ function SortableFieldCard({
                 type="button"
                 onClick={() => onValueChange(undefined)}
                 disabled={disabled}
-                className="inline-flex items-center justify-center border-2 border-foreground bg-card p-1 text-destructive transition-colors hover:bg-destructive hover:text-primary-foreground disabled:opacity-50"
-                aria-label="Remove image"
+                className="inline-flex items-center justify-center border-2 border-foreground bg-card p-1 text-foreground/60 transition-colors hover:text-foreground disabled:opacity-50"
+                aria-label="Clear image"
               >
                 <XIcon weight="bold" className="size-4" />
               </button>
             )}
+            <button
+              type="button"
+              onClick={onRemove}
+              disabled={disabled}
+              className="inline-flex items-center justify-center border-2 border-foreground bg-card p-1 text-destructive transition-colors hover:bg-destructive hover:text-primary-foreground disabled:opacity-50"
+              aria-label="Remove field"
+            >
+              <TrashIcon weight="bold" className="size-4" />
+            </button>
           </div>
 
           {imageValue ? (
@@ -428,12 +478,26 @@ function SortableFieldCard({
         <span className="inline-flex items-center gap-1.5 text-foreground/50">
           {FIELD_ICONS[field.type]}
         </span>
-        <span className="min-w-0 flex-1 truncate text-sm font-black uppercase tracking-[0.14em] text-foreground">
-          {field.label}
-        </span>
-        <span className="shrink-0 text-[0.6rem] font-bold uppercase tracking-widest text-foreground/40">
+        <input
+          type="text"
+          value={field.label}
+          onChange={(e) => onLabelChange(e.target.value)}
+          placeholder={FIELD_TYPE_LABELS[field.type]}
+          disabled={disabled}
+          className="min-w-0 flex-1 truncate border-0 bg-transparent text-sm font-black uppercase tracking-[0.14em] text-foreground placeholder:text-foreground/30 outline-none"
+        />
+        <span className="hidden shrink-0 text-[0.6rem] font-bold uppercase tracking-widest text-foreground/40 sm:inline">
           {FIELD_TYPE_LABELS[field.type]}
         </span>
+        <button
+          type="button"
+          onClick={onRemove}
+          disabled={disabled}
+          className="shrink-0 p-1 text-foreground/30 transition-colors hover:text-destructive disabled:opacity-50"
+          aria-label="Remove field"
+        >
+          <XIcon weight="bold" className="size-3.5" />
+        </button>
       </div>
 
       {/* Field input */}
