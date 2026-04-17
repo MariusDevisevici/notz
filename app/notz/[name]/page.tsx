@@ -1,5 +1,6 @@
 import { getNotz } from "@/app/actions/notz-actions";
 import { notFound } from "next/navigation";
+import { NotzWorkspace } from "./notz-workspace";
 
 type NotzPageProps = {
   params: Promise<{
@@ -16,5 +17,14 @@ export default async function NotzPage({ params }: NotzPageProps) {
     notFound();
   }
 
-  return <section className="px-2 py-6 sm:px-6 sm:py-10" />;
+  return (
+    <main className="px-2 py-6 sm:px-6 sm:py-10">
+      <NotzWorkspace
+        notzId={notz.id}
+        notzName={notz.name}
+        featured={notz.featured}
+        initialFields={notz.fields}
+      />
+    </main>
+  );
 }

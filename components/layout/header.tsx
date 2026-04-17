@@ -14,7 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ListIcon, GearSixIcon, StarIcon } from "@phosphor-icons/react/dist/ssr";
+import { ListIcon, StarIcon } from "@phosphor-icons/react/dist/ssr";
 
 const Header = async () => {
   const session = await auth();
@@ -130,16 +130,7 @@ const Header = async () => {
                 Manage Notz
               </Link>
 
-              <Link
-                href="/create-notz"
-                className={cn(
-                  buttonVariants({ variant: "ghost", size: "icon-xs" }),
-                  "shrink-0 sm:hidden"
-                )}
-                aria-label="Manage Notz"
-              >
-                <GearSixIcon weight="bold" className="size-4" />
-              </Link>
+
 
               <DropdownMenu>
                 <DropdownMenuTrigger
@@ -176,8 +167,13 @@ const Header = async () => {
                     <DropdownMenuItem className="border-3 border-foreground bg-accent px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em] text-foreground shadow-[4px_4px_0_0_var(--color-foreground)] focus:bg-accent focus:text-foreground">
                       Account
                     </DropdownMenuItem>
-                    <DropdownMenuItem className="border-3 border-foreground bg-secondary px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em] text-foreground shadow-[4px_4px_0_0_var(--color-foreground)] focus:bg-secondary focus:text-foreground">
-                      Settings
+                    <DropdownMenuItem className="border-3 border-foreground bg-secondary px-4 py-3 text-left text-xs font-black uppercase tracking-[0.16em] text-foreground shadow-[4px_4px_0_0_var(--color-foreground)] focus:bg-secondary focus:text-foreground sm:hidden">
+                      <Link
+                        href="/create-notz"
+                        className="flex w-full text-foreground"
+                      >
+                        Manage Notz
+                      </Link>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator className="mx-0 my-1 h-0.75 bg-foreground" />
                     <form action={logoutAction}>

@@ -25,6 +25,7 @@ model Notz {
   id        String   @id @default(cuid())
   name      String
   featured  Boolean  @default(false)
+  fields    Json     @default("[]")
   userId    String
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())

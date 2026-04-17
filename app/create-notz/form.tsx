@@ -11,6 +11,7 @@ import { createNotzSchema } from "@/lib/validations/notz";
 import { MAX_FEATURED_NOTZ } from "@/lib/models/notz";
 import type { CreateNotzInput } from "@/lib/models/notz";
 import { InfoIcon } from "@phosphor-icons/react";
+import { FieldBuilder } from "./field-builder";
 
 interface CreateNotzFormProps {
   featuredCount: number;
@@ -39,12 +40,16 @@ export function CreateNotzForm({ featuredCount, onCreated }: CreateNotzFormProps
     register,
     handleSubmit,
     control,
+    watch,
+    setValue,
     formState: { errors },
     reset,
   } = useForm<CreateNotzInput>({
     resolver: zodResolver(createNotzSchema),
-    defaultValues: { featured: false },
+    defaultValues: { featured: false, fields: [] },
   });
+
+  const fieldsValue = watch("fields");
 
   const onSubmit = (data: CreateNotzInput) => {
     startTransition(async () => {
@@ -125,6 +130,21 @@ export function CreateNotzForm({ featuredCount, onCreated }: CreateNotzFormProps
           {errors.featured && (
             <p className="text-xs font-bold uppercase tracking-[0.12em] text-destructive">
               {errors.featured.message}
+            </p>
+          )}
+        </div>
+
+        <div className="border-t-2 border-foreground/20 pt-4">
+          <FieldBuilder
+            fields={fieldsValue ?? []}
+            onChange={(newFields) => setValue("fields", newFields)}
+            disabled={isPending}
+          />
+          {errors.fields && (
+            <p className="mt-1 text-xs font-bold uppercase tracking-[0.12em] text-destructive">
+              {typeof errors.fields.message === "string"
+                ? errors.fields.message
+                : "Check your field definitions"}
             </p>
           )}
         </div>

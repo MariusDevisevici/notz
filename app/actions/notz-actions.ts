@@ -8,12 +8,15 @@ import {
   createNotzSchema,
   deleteNotzSchema,
   updateNotzSchema,
+  updateNotzFieldsSchema,
 } from "@/lib/validations/notz";
 import type {
   CreateNotzInput,
   DeleteNotzInput,
   ManageNotzItem,
+  NotzField,
   UpdateNotzInput,
+  UpdateNotzFieldsInput,
 } from "@/lib/models/notz";
 import { MAX_FEATURED_NOTZ } from "@/lib/models/notz";
 
@@ -49,11 +52,21 @@ export async function getNotz(name: string) {
       },
     },
     select: {
+      id: true,
       name: true,
+      featured: true,
+      fields: true,
     },
   });
 
-  return notz;
+  if (!notz) return null;
+
+  return {
+    id: notz.id,
+    name: notz.name,
+    featured: notz.featured,
+    fields: Array.isArray(notz.fields) ? (notz.fields as NotzField[]) : [],
+  };
 }
 
 export async function getFeaturedCount() {
@@ -77,7 +90,7 @@ export async function getManageNotzData(): Promise<{
 }> {
   const userEmail = await getSessionEmailOrRedirect();
 
-  const notz = await prisma.notz.findMany({
+  const rawNotz = await prisma.notz.findMany({
     where: {
       user: {
         email: userEmail,
@@ -88,7 +101,19 @@ export async function getManageNotzData(): Promise<{
       id: true,
       name: true,
       featured: true,
+      fields: true,
     },
+  });
+
+  const notz: ManageNotzItem[] = rawNotz.map((item) => {
+    const fields = Array.isArray(item.fields) ? (item.fields as ManageNotzItem["fields"]) : [];
+    return {
+      id: item.id,
+      name: item.name,
+      featured: item.featured,
+      fieldCount: fields.length,
+      fields,
+    };
   });
 
   return {
@@ -132,6 +157,7 @@ export async function createNotz(input: CreateNotzInput) {
       data: {
         name: validated.data.name,
         featured: validated.data.featured,
+        fields: validated.data.fields ?? [],
         user: {
           connect: {
             email: userEmail,
@@ -209,6 +235,7 @@ export async function updateNotz(input: UpdateNotzInput) {
       data: {
         name: validated.data.name,
         featured: validated.data.featured,
+        ...(validated.data.fields !== undefined && { fields: validated.data.fields }),
       },
     });
 
@@ -249,6 +276,41 @@ export async function deleteNotz(input: DeleteNotzInput) {
   if (result.count === 0) {
     return { error: "Notz not found" };
   }
+
+  revalidateNotzViews();
+
+  return { success: true };
+}
+
+export async function updateNotzFields(input: UpdateNotzFieldsInput) {
+  const userEmail = await getSessionEmailOrNull();
+
+  if (!userEmail) {
+    return { error: "Unauthorized" };
+  }
+
+  const validated = updateNotzFieldsSchema.safeParse(input);
+
+  if (!validated.success) {
+    return { error: validated.error.flatten().fieldErrors };
+  }
+
+  const existingNotz = await prisma.notz.findFirst({
+    where: {
+      id: validated.data.id,
+      user: { email: userEmail },
+    },
+    select: { id: true },
+  });
+
+  if (!existingNotz) {
+    return { error: "Notz not found" };
+  }
+
+  await prisma.notz.update({
+    where: { id: validated.data.id },
+    data: { fields: validated.data.fields },
+  });
 
   revalidateNotzViews();
 

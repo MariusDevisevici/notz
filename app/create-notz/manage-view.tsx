@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import React, { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { PencilSimpleIcon, PlusIcon, TrashIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { CreateNotzForm } from "./form";
+import { FieldBuilder } from "./field-builder";
 import { deleteNotz, updateNotz } from "@/app/actions/notz-actions";
 import type { ManageNotzItem, UpdateNotzInput } from "@/lib/models/notz";
 
@@ -55,6 +56,7 @@ export function ManageNotzView({ featuredCount, initialNotz }: ManageNotzViewPro
       id: item.id,
       name: item.name,
       featured: item.featured,
+      fields: item.fields,
     });
     setActionError(null);
   };
@@ -143,7 +145,7 @@ export function ManageNotzView({ featuredCount, initialNotz }: ManageNotzViewPro
       </div>
 
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent showCloseButton={false} className="max-w-[calc(100%-2rem)] sm:max-w-md">
+        <DialogContent showCloseButton={false} className="max-h-[calc(100vh-4rem)] max-w-[calc(100%-2rem)] overflow-x-hidden overflow-y-auto sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-xl font-black uppercase tracking-[0.18em] text-foreground sm:text-2xl">
               Create Notz
@@ -214,6 +216,7 @@ export function ManageNotzView({ featuredCount, initialNotz }: ManageNotzViewPro
             <thead>
               <tr className="border-b-3 border-foreground bg-secondary/35 text-left text-xs font-black uppercase tracking-[0.16em] text-foreground">
                 <th className="px-4 py-3 sm:px-5">Name</th>
+                <th className="px-4 py-3">Fields</th>
                 <th className="px-4 py-3">Featured</th>
                 <th className="px-4 py-3 text-right sm:px-5">Actions</th>
               </tr>
@@ -221,7 +224,7 @@ export function ManageNotzView({ featuredCount, initialNotz }: ManageNotzViewPro
             <tbody>
               {initialNotz.length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="px-4 py-10 text-center text-sm font-bold uppercase tracking-[0.14em] text-foreground/60 sm:px-5">
+                  <td colSpan={4} className="px-4 py-10 text-center text-sm font-bold uppercase tracking-[0.14em] text-foreground/60 sm:px-5">
                     No notz yet. Create your first one.
                   </td>
                 </tr>
@@ -230,110 +233,132 @@ export function ManageNotzView({ featuredCount, initialNotz }: ManageNotzViewPro
                   const isEditing = editingId === item.id && draft;
 
                   return (
-                    <tr key={item.id} className="border-b-2 border-foreground/20 last:border-b-0">
-                      <td className="px-4 py-3 align-middle sm:px-5">
-                        {isEditing ? (
-                          <input
-                            type="text"
-                            value={draft.name}
-                            onChange={(event) =>
-                              setDraft((current) =>
-                                current
-                                  ? {
-                                      ...current,
-                                      name: event.target.value,
-                                    }
-                                  : current
-                              )
-                            }
-                            disabled={isPending}
-                            className="w-full border-2 border-foreground bg-background px-3 py-2 text-sm font-medium text-foreground outline-none focus:border-3"
-                          />
-                        ) : (
-                          <span className="text-sm font-bold uppercase tracking-[0.12em] text-foreground">
-                            {item.name}
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 align-middle">
-                        {isEditing ? (
-                          <label className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-foreground">
-                            <Checkbox
-                              checked={draft.featured}
-                              onCheckedChange={(checked) =>
+                    <React.Fragment key={item.id}>
+                      <tr className="border-b-2 border-foreground/20 last:border-b-0">
+                        <td className="px-4 py-3 align-middle sm:px-5">
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              value={draft.name}
+                              onChange={(event) =>
                                 setDraft((current) =>
                                   current
                                     ? {
                                         ...current,
-                                        featured: Boolean(checked),
+                                        name: event.target.value,
                                       }
                                     : current
                                 )
                               }
                               disabled={isPending}
-                              className="size-5 border-2 border-foreground data-checked:border-foreground data-checked:bg-primary data-checked:text-primary-foreground"
+                              className="w-full border-2 border-foreground bg-background px-3 py-2 text-sm font-medium text-foreground outline-none focus:border-3"
                             />
-                            Featured
-                          </label>
-                        ) : item.featured ? (
-                          <span className="inline-flex items-center border-2 border-foreground bg-primary px-2 py-1 text-[0.65rem] font-black uppercase tracking-[0.14em] text-primary-foreground">
-                            Yes
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center border-2 border-foreground bg-background px-2 py-1 text-[0.65rem] font-black uppercase tracking-[0.14em] text-foreground/70">
-                            No
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 align-middle sm:px-5">
-                        <div className="flex justify-end gap-2">
-                          {isEditing ? (
-                            <>
-                              <Button
-                                type="button"
-                                size="xs"
-                                onClick={submitEdit}
-                                disabled={isPending}
-                              >
-                                Save
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="xs"
-                                onClick={cancelEdit}
-                                disabled={isPending}
-                              >
-                                Cancel
-                              </Button>
-                            </>
                           ) : (
-                            <>
-                              <Button
-                                type="button"
-                                variant="outline"
-                                size="xs"
-                                onClick={() => beginEdit(item)}
-                                disabled={isPending}
-                              >
-                                <PencilSimpleIcon weight="bold" />
-                                Edit
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="destructive"
-                                size="xs"
-                                onClick={() => openDeleteConfirm(item.id, item.name)}
-                                disabled={isPending}
-                              >
-                                <TrashIcon weight="bold" />
-                                Delete
-                              </Button>
-                            </>
+                            <span className="text-sm font-bold uppercase tracking-[0.12em] text-foreground">
+                              {item.name}
+                            </span>
                           )}
-                        </div>
-                      </td>
-                    </tr>
+                        </td>
+                        <td className="px-4 py-3 align-middle">
+                          <span className="inline-flex items-center border-2 border-foreground bg-secondary px-2 py-1 text-[0.65rem] font-black uppercase tracking-[0.14em] text-foreground">
+                            {isEditing ? (draft.fields?.length ?? 0) : item.fieldCount}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 align-middle">
+                          {isEditing ? (
+                            <label className="inline-flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-foreground">
+                              <Checkbox
+                                checked={draft.featured}
+                                onCheckedChange={(checked) =>
+                                  setDraft((current) =>
+                                    current
+                                      ? {
+                                          ...current,
+                                          featured: Boolean(checked),
+                                        }
+                                      : current
+                                  )
+                                }
+                                disabled={isPending}
+                                className="size-5 border-2 border-foreground data-checked:border-foreground data-checked:bg-primary data-checked:text-primary-foreground"
+                              />
+                              Featured
+                            </label>
+                          ) : item.featured ? (
+                            <span className="inline-flex items-center border-2 border-foreground bg-primary px-2 py-1 text-[0.65rem] font-black uppercase tracking-[0.14em] text-primary-foreground">
+                              Yes
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center border-2 border-foreground bg-background px-2 py-1 text-[0.65rem] font-black uppercase tracking-[0.14em] text-foreground/70">
+                              No
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 align-middle sm:px-5">
+                          <div className="flex justify-end gap-2">
+                            {isEditing ? (
+                              <>
+                                <Button
+                                  type="button"
+                                  size="xs"
+                                  onClick={submitEdit}
+                                  disabled={isPending}
+                                >
+                                  Save
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="xs"
+                                  onClick={cancelEdit}
+                                  disabled={isPending}
+                                >
+                                  Cancel
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="xs"
+                                  onClick={() => beginEdit(item)}
+                                  disabled={isPending}
+                                >
+                                  <PencilSimpleIcon weight="bold" />
+                                  Edit
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="destructive"
+                                  size="xs"
+                                  onClick={() => openDeleteConfirm(item.id, item.name)}
+                                  disabled={isPending}
+                                >
+                                  <TrashIcon weight="bold" />
+                                  Delete
+                                </Button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                      {isEditing && (
+                        <tr className="border-b-2 border-foreground/20">
+                          <td colSpan={4} className="px-4 py-3 sm:px-5">
+                            <FieldBuilder
+                              fields={draft.fields ?? []}
+                              onChange={(newFields) =>
+                                setDraft((current) =>
+                                  current ? { ...current, fields: newFields } : current
+                                )
+                              }
+                              disabled={isPending}
+                            />
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   );
                 })
               )}
@@ -382,6 +407,15 @@ export function ManageNotzView({ featuredCount, initialNotz }: ManageNotzViewPro
                           />
                           Featured
                         </label>
+                        <FieldBuilder
+                          fields={draft.fields ?? []}
+                          onChange={(newFields) =>
+                            setDraft((current) =>
+                              current ? { ...current, fields: newFields } : current
+                            )
+                          }
+                          disabled={isPending}
+                        />
                         <div className="flex gap-2">
                           <Button
                             type="button"
@@ -410,6 +444,11 @@ export function ManageNotzView({ featuredCount, initialNotz }: ManageNotzViewPro
                           <span className="truncate text-sm font-bold uppercase tracking-[0.12em] text-foreground">
                             {item.name}
                           </span>
+                          {item.fieldCount > 0 && (
+                            <span className="inline-flex shrink-0 items-center border border-foreground bg-secondary px-1.5 py-0.5 text-[0.6rem] font-bold uppercase leading-none tracking-widest text-foreground">
+                              {item.fieldCount}f
+                            </span>
+                          )}
                           {item.featured && (
                             <span className="inline-flex shrink-0 items-center border-2 border-foreground bg-primary px-1.5 py-0.5 text-[0.6rem] font-black uppercase leading-none tracking-[0.14em] text-primary-foreground">
                               ★
