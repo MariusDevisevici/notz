@@ -21,6 +21,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
+  KanbanIcon,
   DotsSixVerticalIcon,
   TextTIcon,
   TextAaIcon,
@@ -46,6 +47,7 @@ import { FIELD_TYPES, FIELD_TYPE_LABELS } from "@/lib/models/notz";
 import { compressImageFile } from "@/lib/utils/image-field";
 
 const FIELD_ICONS: Record<FieldType, React.ReactNode> = {
+  board: <KanbanIcon weight="bold" className="size-4" />,
   label: <TextTIcon weight="bold" className="size-4" />,
   text: <TextAaIcon weight="bold" className="size-4" />,
   number: <HashIcon weight="bold" className="size-4" />,
@@ -127,6 +129,15 @@ export function FieldBuilder({ fields, onChange, disabled }: FieldBuilderProps) 
       id: generateId(),
       label: "",
       type,
+      ...(type === "board"
+        ? {
+            value: {
+              todo: [],
+              inProgress: [],
+              done: [],
+            },
+          }
+        : {}),
       ...(type === "rating" ? { max: 5 } : {}),
       ...(type === "tag" ? { options: [] } : {}),
       ...(type === "list" ? { checkable: false } : {}),

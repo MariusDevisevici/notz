@@ -1,5 +1,6 @@
 "use server";
 
+import { z } from "zod";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
@@ -7,6 +8,7 @@ import { redirect } from "next/navigation";
 import {
   createNotzSchema,
   deleteNotzSchema,
+  notzFieldSchema,
   updateNotzSchema,
   updateNotzFieldsSchema,
 } from "@/lib/validations/notz";
@@ -36,9 +38,24 @@ const getSessionEmailOrNull = async () => {
   return session?.user?.email ?? null;
 };
 
-const revalidateNotzViews = () => {
+const persistedNotzFieldsSchema = z.array(notzFieldSchema);
+
+const parsePersistedFields = (value: unknown): NotzField[] => {
+  const parsed = persistedNotzFieldsSchema.safeParse(value);
+  return parsed.success ? parsed.data : [];
+};
+
+const serializeFieldsForStorage = (fields: NotzField[]) =>
+  JSON.parse(JSON.stringify(fields)) as NotzField[];
+
+const revalidateNotzViews = (paths: string[] = []) => {
   revalidatePath("/", "layout");
   revalidatePath("/create-notz");
+  revalidatePath("/notz/[name]", "page");
+
+  for (const path of paths) {
+    revalidatePath(path);
+  }
 };
 
 export async function getNotz(name: string) {
@@ -65,7 +82,7 @@ export async function getNotz(name: string) {
     id: notz.id,
     name: notz.name,
     featured: notz.featured,
-    fields: Array.isArray(notz.fields) ? (notz.fields as NotzField[]) : [],
+    fields: parsePersistedFields(notz.fields),
   };
 }
 
@@ -106,7 +123,7 @@ export async function getManageNotzData(): Promise<{
   });
 
   const notz: ManageNotzItem[] = rawNotz.map((item) => {
-    const fields = Array.isArray(item.fields) ? (item.fields as ManageNotzItem["fields"]) : [];
+    const fields = parsePersistedFields(item.fields);
     return {
       id: item.id,
       name: item.name,
@@ -157,7 +174,7 @@ export async function createNotz(input: CreateNotzInput) {
       data: {
         name: validated.data.name,
         featured: validated.data.featured,
-        fields: validated.data.fields ?? [],
+        fields: serializeFieldsForStorage(validated.data.fields ?? []),
         user: {
           connect: {
             email: userEmail,
@@ -166,7 +183,7 @@ export async function createNotz(input: CreateNotzInput) {
       },
     });
 
-    revalidateNotzViews();
+    revalidateNotzViews([`/notz/${validated.data.name}`]);
 
     return { success: true, notz };
   } catch (error) {
@@ -200,6 +217,7 @@ export async function updateNotz(input: UpdateNotzInput) {
     },
     select: {
       id: true,
+      name: true,
     },
   });
 
@@ -235,11 +253,16 @@ export async function updateNotz(input: UpdateNotzInput) {
       data: {
         name: validated.data.name,
         featured: validated.data.featured,
-        ...(validated.data.fields !== undefined && { fields: validated.data.fields }),
+        ...(validated.data.fields !== undefined && {
+          fields: serializeFieldsForStorage(validated.data.fields),
+        }),
       },
     });
 
-    revalidateNotzViews();
+    revalidateNotzViews([
+      `/notz/${existingNotz.name}`,
+      `/notz/${validated.data.name}`,
+    ]);
 
     return { success: true, notz };
   } catch (error) {
@@ -300,7 +323,7 @@ export async function updateNotzFields(input: UpdateNotzFieldsInput) {
       id: validated.data.id,
       user: { email: userEmail },
     },
-    select: { id: true },
+    select: { id: true, name: true },
   });
 
   if (!existingNotz) {
@@ -309,10 +332,10 @@ export async function updateNotzFields(input: UpdateNotzFieldsInput) {
 
   await prisma.notz.update({
     where: { id: validated.data.id },
-    data: { fields: validated.data.fields },
+    data: { fields: serializeFieldsForStorage(validated.data.fields) },
   });
 
-  revalidateNotzViews();
+  revalidateNotzViews([`/notz/${existingNotz.name}`]);
 
   return { success: true };
 }

@@ -7,6 +7,7 @@ const notzNameSchema = z
   .refine((val) => !/\s/.test(val), "Name cannot contain spaces");
 
 const fieldTypeSchema = z.enum([
+  "board",
   "label",
   "text",
   "number",
@@ -18,6 +19,17 @@ const fieldTypeSchema = z.enum([
   "link",
   "list",
 ]);
+
+const boardCardSchema = z.object({
+  id: z.string().min(1),
+  text: z.string().trim().min(1),
+});
+
+const boardValueSchema = z.object({
+  todo: z.array(boardCardSchema),
+  inProgress: z.array(boardCardSchema),
+  done: z.array(boardCardSchema),
+});
 
 export const notzFieldSchema = z
   .object({
@@ -41,6 +53,7 @@ export const notzFieldSchema = z
             completed: z.boolean(),
           })
         ),
+        boardValueSchema,
         z.null(),
       ])
       .optional(),

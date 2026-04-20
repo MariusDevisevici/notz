@@ -21,6 +21,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import {
+  KanbanIcon,
   DotsSixVerticalIcon,
   TextTIcon,
   TextAaIcon,
@@ -32,7 +33,6 @@ import {
   ImageIcon,
   LinkIcon,
   ListBulletsIcon,
-  FloppyDiskIcon,
   CheckIcon,
   PencilSimpleIcon,
   PlusIcon,
@@ -45,6 +45,7 @@ import { updateNotzFields } from "@/app/actions/notz-actions";
 import { FieldInput } from "./field-inputs";
 
 const FIELD_ICONS: Record<FieldType, React.ReactNode> = {
+  board: <KanbanIcon weight="bold" className="size-4" />,
   label: <TextTIcon weight="bold" className="size-4" />,
   text: <TextAaIcon weight="bold" className="size-4" />,
   number: <HashIcon weight="bold" className="size-4" />,
@@ -56,6 +57,8 @@ const FIELD_ICONS: Record<FieldType, React.ReactNode> = {
   link: <LinkIcon weight="bold" className="size-4" />,
   list: <ListBulletsIcon weight="bold" className="size-4" />,
 };
+
+const AUTOSAVE_DELAY_MS = 700;
 
 interface NotzWorkspaceProps {
   notzId: string;
@@ -70,6 +73,10 @@ export function NotzWorkspace({
   featured,
   initialFields,
 }: NotzWorkspaceProps) {
+  const initialSnapshot = useMemo(
+    () => JSON.stringify(initialFields.map((field, index) => ({ ...field, row: index, column: 0 }))),
+    [initialFields]
+  );
   const [fields, setFields] = useState<NotzField[]>(initialFields);
   const [isPending, startTransition] = useTransition();
   const [saved, setSaved] = useState(false);
@@ -79,8 +86,20 @@ export function NotzWorkspace({
   const [activeId, setActiveId] = useState<string | null>(null);
   const [showTypePicker, setShowTypePicker] = useState(false);
   const savedTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const autosaveTimeout = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const hasMounted = useRef(false);
+  const lastSavedSnapshot = useRef(initialSnapshot);
+  const latestSnapshot = useRef(initialSnapshot);
+  const isSavingRef = useRef(false);
+  const savingSnapshotRef = useRef<string | null>(null);
+  const queuedSaveRef = useRef<{ fields: NotzField[]; snapshot: string } | null>(null);
 
   const fieldIds = useMemo(() => fields.map((f) => f.id), [fields]);
+  const normalizedFields = useMemo(
+    () => fields.map((field, index) => ({ ...field, row: index, column: 0 })),
+    [fields]
+  );
+  const normalizedSnapshot = useMemo(() => JSON.stringify(normalizedFields), [normalizedFields]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -110,6 +129,15 @@ export function NotzWorkspace({
       id: `f_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
       label: "",
       type,
+      ...(type === "board"
+        ? {
+            value: {
+              todo: [],
+              inProgress: [],
+              done: [],
+            },
+          }
+        : {}),
       ...(type === "rating" ? { max: 5 } : {}),
       ...(type === "tag" ? { options: [] } : {}),
       ...(type === "list" ? { checkable: false } : {}),
@@ -118,12 +146,14 @@ export function NotzWorkspace({
     setShowTypePicker(false);
     setDirty(true);
     setSaved(false);
+    setSaveError(null);
   }, []);
 
   const removeField = useCallback((fieldId: string) => {
     setFields((prev) => prev.filter((f) => f.id !== fieldId));
     setDirty(true);
     setSaved(false);
+    setSaveError(null);
   }, []);
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
@@ -152,36 +182,95 @@ export function NotzWorkspace({
     if (!over || active.id === over.id) return;
     setDirty(true);
     setSaved(false);
+    setSaveError(null);
   }, []);
 
-  const save = () => {
-    const normalized = fields.map((f, i) => ({ ...f, row: i, column: 0 }));
+  const saveSnapshot = useCallback(async (nextFields: NotzField[], snapshot: string) => {
+    if (snapshot === lastSavedSnapshot.current || snapshot === savingSnapshotRef.current) {
+      return;
+    }
+
+    if (isSavingRef.current) {
+      queuedSaveRef.current = { fields: nextFields, snapshot };
+      return;
+    }
+
+    isSavingRef.current = true;
+    savingSnapshotRef.current = snapshot;
     setSaveError(null);
-    startTransition(async () => {
-      const result = await updateNotzFields({ id: notzId, fields: normalized });
-      if ("success" in result && result.success) {
+
+    const result = await updateNotzFields({ id: notzId, fields: nextFields });
+
+    isSavingRef.current = false;
+    savingSnapshotRef.current = null;
+
+    if ("success" in result && result.success) {
+      lastSavedSnapshot.current = snapshot;
+      setSaveVersion((current) => current + 1);
+
+      if (snapshot === latestSnapshot.current) {
         setDirty(false);
         setSaved(true);
-        setSaveVersion((current) => current + 1);
         if (savedTimeout.current) clearTimeout(savedTimeout.current);
         savedTimeout.current = setTimeout(() => setSaved(false), 2000);
-      } else if ("error" in result) {
-        const err = result.error;
-        if (typeof err === "string") {
-          setSaveError(err);
-        } else if (err && typeof err === "object") {
-          const msgs = Object.values(err as Record<string, unknown>).flat();
-          setSaveError(msgs.find((m) => typeof m === "string") as string ?? "Validation failed");
-        } else {
-          setSaveError("Failed to save");
-        }
       }
-    });
-  };
+    } else if ("error" in result) {
+      const err = result.error;
+      setSaved(false);
+      setDirty(true);
+      if (typeof err === "string") {
+        setSaveError(err);
+      } else if (err && typeof err === "object") {
+        const msgs = Object.values(err as Record<string, unknown>).flat();
+        setSaveError(msgs.find((m) => typeof m === "string") as string ?? "Validation failed");
+      } else {
+        setSaveError("Failed to save");
+      }
+    }
+
+    if (queuedSaveRef.current) {
+      const queued = queuedSaveRef.current;
+      queuedSaveRef.current = null;
+      if (queued.snapshot !== lastSavedSnapshot.current) {
+        startTransition(() => {
+          void saveSnapshot(queued.fields, queued.snapshot);
+        });
+      }
+    }
+  }, [notzId, startTransition]);
+
+  useEffect(() => {
+    latestSnapshot.current = normalizedSnapshot;
+
+    if (!hasMounted.current) {
+      hasMounted.current = true;
+      return;
+    }
+
+    if (normalizedSnapshot === lastSavedSnapshot.current) {
+      setDirty(false);
+      return;
+    }
+
+    setDirty(true);
+    setSaved(false);
+
+    if (autosaveTimeout.current) clearTimeout(autosaveTimeout.current);
+    autosaveTimeout.current = setTimeout(() => {
+      startTransition(() => {
+        void saveSnapshot(normalizedFields, normalizedSnapshot);
+      });
+    }, AUTOSAVE_DELAY_MS);
+
+    return () => {
+      if (autosaveTimeout.current) clearTimeout(autosaveTimeout.current);
+    };
+  }, [normalizedFields, normalizedSnapshot, saveSnapshot, startTransition]);
 
   useEffect(() => {
     return () => {
       if (savedTimeout.current) clearTimeout(savedTimeout.current);
+      if (autosaveTimeout.current) clearTimeout(autosaveTimeout.current);
     };
   }, []);
 
@@ -204,34 +293,16 @@ export function NotzWorkspace({
             </span>
           )}
         </div>
-        {fields.length > 0 && (
-          <button
-            type="button"
-            onClick={save}
-            disabled={isPending || !dirty}
-            className={`inline-flex w-full items-center justify-center gap-2 border-3 px-4 py-2.5 text-xs font-black uppercase tracking-[0.16em] transition-colors disabled:opacity-50 sm:w-auto ${
-              saved
-                ? "border-foreground bg-secondary text-foreground"
-                : dirty
-                  ? "border-foreground bg-primary text-primary-foreground hover:bg-primary/90"
-                  : "border-foreground bg-background text-foreground"
-            }`}
-          >
-            {isPending ? (
-              "Saving…"
-            ) : saved ? (
-              <>
-                <CheckIcon weight="bold" className="size-4" />
-                Saved
-              </>
-            ) : (
-              <>
-                <FloppyDiskIcon weight="bold" className="size-4" />
-                Save
-              </>
-            )}
-          </button>
-        )}
+        <div className={`inline-flex items-center justify-center gap-2 border-3 px-4 py-2.5 text-xs font-black uppercase tracking-[0.16em] sm:w-auto ${
+          saveError
+            ? "border-destructive bg-destructive/10 text-destructive"
+            : isPending || dirty
+              ? "border-foreground bg-primary text-primary-foreground"
+              : "border-foreground bg-secondary text-foreground"
+        }`}>
+          {!saveError && <CheckIcon weight="bold" className="size-4" />}
+          {saveError ? "Save failed" : isPending || dirty ? "Saving..." : saved ? "Saved" : "Up to date"}
+        </div>
       </div>
 
       {saveError && (
